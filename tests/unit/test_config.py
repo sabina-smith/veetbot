@@ -67,6 +67,29 @@ def test_loads_frozen_settings() -> None:
     assert settings.browser_allowed_origins == ()
 
 
+def test_development_model_policy_is_optional_and_development_only() -> None:
+    assert load_settings(base_environment()).development_model_policy is None
+    configured = load_settings({**base_environment(), "AGENT_DEVELOPMENT_MODEL_POLICY": " fable "})
+    assert configured.development_model_policy == "fable"
+    assert (
+        load_settings(
+            {**base_environment(), "AGENT_DEVELOPMENT_MODEL_POLICY": ""}
+        ).development_model_policy
+        is None
+    )
+    with pytest.raises(ConfigurationError, match="AGENT_DEVELOPMENT_MODEL_POLICY"):
+        load_settings(
+            {
+                **base_environment(),
+                "DEPLOYMENT_MODE": "production",
+                "AUTH_MODE": "token",
+                "AUTH_TOKEN": "t",
+                "SANDBOX_MECHANISM": "gvisor",
+                "AGENT_DEVELOPMENT_MODEL_POLICY": "fable",
+            }
+        )
+
+
 def test_reconsolidation_api_flag_is_independent_and_default_off() -> None:
     assert not load_settings(base_environment()).memory_reconsolidation_api_enabled
     enabled = load_settings({**base_environment(), "AGENT_MEMORY_RECONSOLIDATION_API_ENABLED": "1"})

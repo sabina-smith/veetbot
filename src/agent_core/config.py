@@ -168,6 +168,7 @@ class Settings:
     call_configuration: CallConfiguration | None = None
     call_webhook_secret: SecretStr | None = None
     svp_enabled: bool = False
+    development_model_policy: str | None = None
     email_enabled: bool = False
     email_mode_enabled: bool = False
     email_junk_filter_mode: EmailJunkMode = EmailJunkMode.OFF
@@ -1615,6 +1616,10 @@ def _load_settings(
         DeploymentMode, _required(values, "DEPLOYMENT_MODE"), "DEPLOYMENT_MODE"
     )
     auth_mode = _parse_enum(AuthMode, values.get("AUTH_MODE", "dev"), "AUTH_MODE")
+    # Replaces only the scripted development default; production keeps its own.
+    development_model_policy = values.get("AGENT_DEVELOPMENT_MODEL_POLICY", "").strip() or None
+    if development_model_policy is not None and deployment_mode is DeploymentMode.PRODUCTION:
+        raise ConfigurationError("AGENT_DEVELOPMENT_MODEL_POLICY is refused in production")
     sandbox = _parse_enum(
         SandboxMechanism, values.get("SANDBOX_MECHANISM", "docker"), "SANDBOX_MECHANISM"
     )
@@ -2055,6 +2060,7 @@ def _load_settings(
         call_configuration=call_configuration,
         call_webhook_secret=call_webhook_secret,
         svp_enabled=svp_enabled,
+        development_model_policy=development_model_policy,
         email_enabled=email_enabled,
         email_mode_enabled=email_mode_enabled,
         email_junk_filter_mode=email_junk_filter_mode,

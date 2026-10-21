@@ -46,6 +46,26 @@ def test_effective_model_policy_never_defaults_production_to_fake(
     assert _effective_model_policy(deployment_mode, requested_policy) == expected
 
 
+@pytest.mark.parametrize(
+    ("deployment_mode", "requested_policy", "expected"),
+    [
+        (DeploymentMode.DEVELOPMENT, None, "fable"),
+        (DeploymentMode.DEVELOPMENT, "local", "local"),
+        (DeploymentMode.PRODUCTION, None, "astra"),
+        (DeploymentMode.PRODUCTION, "flagship", "flagship"),
+    ],
+)
+def test_development_model_policy_replaces_only_the_development_default(
+    deployment_mode: DeploymentMode,
+    requested_policy: str | None,
+    expected: str,
+) -> None:
+    assert (
+        _effective_model_policy(deployment_mode, requested_policy, development_default="fable")
+        == expected
+    )
+
+
 def load_yaml(path: Path) -> dict[str, Any]:
     value = yaml.safe_load(path.read_text(encoding="utf-8"))
     assert isinstance(value, dict)

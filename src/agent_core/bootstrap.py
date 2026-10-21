@@ -5407,6 +5407,8 @@ async def _model_settings_catalog(
 def _effective_model_policy(
     deployment_mode: DeploymentMode,
     requested_policy: str | None,
+    *,
+    development_default: str | None = None,
 ) -> str:
     """Keep deterministic development while refusing a fake production default."""
 
@@ -5414,7 +5416,7 @@ def _effective_model_policy(
         return requested_policy
     if deployment_mode is DeploymentMode.PRODUCTION:
         return PRODUCTION_MODEL_POLICY
-    return "fake-balanced"
+    return development_default or "fake-balanced"
 
 
 @asynccontextmanager
@@ -5719,6 +5721,7 @@ async def build(
     effective_model_policy = _effective_model_policy(
         effective_settings.deployment_mode,
         model_policy,
+        development_default=effective_settings.development_model_policy,
     )
     web_search_enabled = web_search_provider_override is not None or bool(
         effective_settings.web_search_providers
