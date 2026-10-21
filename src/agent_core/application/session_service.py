@@ -64,9 +64,9 @@ class SessionService:
         self._activate_session = activate_session
         self._close_session = close_session
 
-    async def create(self) -> UUID:
+    async def create(self, *, topic_id: str | None = None) -> UUID:
         async with self._uow_factory() as uow:
-            session_id = await self.create_in(uow)
+            session_id = await self.create_in(uow, topic_id=topic_id)
         await self.activate(session_id)
         return session_id
 
@@ -74,7 +74,7 @@ class SessionService:
         if self._activate_session is not None:
             await self._activate_session(session_id)
 
-    async def create_in(self, uow: RepositoryUnitOfWork) -> UUID:
+    async def create_in(self, uow: RepositoryUnitOfWork, *, topic_id: str | None = None) -> UUID:
         """Create inside a caller-owned transaction; activate after it commits."""
 
         now = self._clock.now()
@@ -93,6 +93,7 @@ class SessionService:
             agent_id=self._default_agent.id,
             agent_version=self._default_agent.version,
             status=SessionStatus.ACTIVE,
+            topic_id=topic_id,
             created_at=now,
             updated_at=now,
         )

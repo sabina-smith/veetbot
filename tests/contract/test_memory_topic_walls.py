@@ -1,0 +1,119 @@
+"""Topic walls: a topic reads its own beliefs plus core, never another topic's.
+
+See topics/ARCHITECTURE.md. ``topic_id`` None is core.
+"""
+
+from uuid import UUID
+
+from agent_core.adapters.determinism import FixedClock
+from agent_core.adapters.memory.in_memory import InMemoryMemoryStore
+from agent_core.adapters.memory.reconsolidation_index import ReconsolidationIndex
+from agent_core.adapters.memory.transactions import MemoryTransaction
+from agent_core.adapters.persistence.unit_of_work import MemoryUnitOfWorkFactory
+from agent_core.domain.events import NewEvent
+from agent_core.domain.memory import BeliefType, MemoryRecord, Sensitivity
+from tests.contract.memory_fixtures import formation_stack, memory, recall_query
+from tests.contract.support import NOW, PRINCIPAL_ID, SESSION_ID, TENANT, principal
+
+
+def _store() -> InMemoryMemoryStore:
+    return InMemoryMemoryStore(FixedClock(NOW), ReconsolidationIndex(MemoryTransaction()))
+
+
+def _in(topic_id: str | None, belief_id: int, position: int) -> MemoryRecord:
+    return memory(
+        belief_id=belief_id, statement=f"User prefers concise answers {belief_id}"
+    ).model_copy(update={"topic_id": topic_id, "store_position": position})
+
+
+async def _seeded() -> tuple[InMemoryMemoryStore, MemoryRecord, MemoryRecord, MemoryRecord]:
+    store = _store()
+    core, garden, household = _in(None, 601, 1), _in("garden", 602, 2), _in("household", 603, 3)
+    for record in (core, garden, household):
+        await store.upsert_belief(record)
+    return store, core, garden, household
+
+
+def _ids(records: list[MemoryRecord]) -> set[int]:
+    return {record.id.int for record in records}
+
+
+async def test_a_topic_recalls_itself_and_core_but_never_another_topic() -> None:
+    store, core, garden, household = await _seeded()
+    garden_view = await store.query(recall_query().model_copy(update={"topic_id": "garden"}))
+    assert _ids(garden_view) == {core.id.int, garden.id.int}
+    household_view = await store.query(recall_query().model_copy(update={"topic_id": "household"}))
+    assert _ids(household_view) == {core.id.int, household.id.int}
+
+
+async def test_core_recall_sees_only_core() -> None:
+    store, core, _, _ = await _seeded()
+    assert _ids(await store.query(recall_query())) == {core.id.int}
+
+
+async def test_related_beliefs_for_deduplication_respect_the_wall() -> None:
+    store, core, garden, _ = await _seeded()
+    related = await store.related(
+        TENANT, PRINCIPAL_ID, "answer style", BeliefType.PREFERENCE, topic_id="garden"
+    )
+    assert _ids(related) == {core.id.int, garden.id.int}
+    core_related = await store.related(TENANT, PRINCIPAL_ID, "answer style", BeliefType.PREFERENCE)
+    assert _ids(core_related) == {core.id.int}
+
+
+async def test_a_belief_defaults_to_core() -> None:
+    assert memory().topic_id is None
+
+
+async def _topic_session(factory: MemoryUnitOfWorkFactory, topic_id: str, value: int) -> UUID:
+    async with factory() as uow:
+        core = await uow.sessions.get(SESSION_ID, principal())
+        session = core.model_copy(update={"id": UUID(int=value), "topic_id": topic_id})
+        await uow.sessions.create(session)
+    return session.id
+
+
+async def test_the_retriever_reads_the_sessions_topic_whatever_the_caller_asks() -> None:
+    _clock, factory, _service, retriever = await formation_stack()
+    core, garden, household = _in(None, 601, 1), _in("garden", 602, 2), _in("household", 603, 3)
+    async with factory() as uow:
+        for record in (core, garden, household):
+            await uow.memories.upsert_belief(record)
+    garden_session = await _topic_session(factory, "garden", 7001)
+
+    forged = recall_query().model_copy(update={"topic_id": "household"})
+    in_garden = await retriever.recall(forged, session_id=garden_session)
+    assert {item.belief_id.int for item in in_garden.items} == {core.id.int, garden.id.int}
+
+    in_core = await retriever.recall(
+        recall_query().model_copy(update={"topic_id": "garden"}), session_id=SESSION_ID
+    )
+    assert {item.belief_id.int for item in in_core.items} == {core.id.int}
+
+
+async def test_formation_stamps_new_beliefs_with_the_sessions_topic() -> None:
+    _clock, factory, service, _retriever = await formation_stack()
+    garden_session = await _topic_session(factory, "garden", 7002)
+    async with factory() as uow:
+        event = await uow.events.append(
+            NewEvent(
+                session_id=garden_session,
+                run_id=None,
+                event_type="user.message.created",
+                actor_type="principal",
+                actor_id=PRINCIPAL_ID,
+                payload={"content": "Remember that bed three gets full sun"},
+            )
+        )
+    record = await service.remember(
+        session_id=garden_session,
+        run_id=None,
+        statement="Bed three gets full sun",
+        subject="bed three",
+        scope="general",
+        belief_type=BeliefType.FACT,
+        portability=None,
+        sensitivity=Sensitivity.INTERNAL,
+        source_event_ids=[event.sequence],
+    )
+    assert record.topic_id == "garden"

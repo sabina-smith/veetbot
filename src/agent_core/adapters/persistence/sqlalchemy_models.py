@@ -95,6 +95,8 @@ class SessionRow(Base):
     principal_id: Mapped[str] = mapped_column(Text)
     agent_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True))
     agent_version: Mapped[str] = mapped_column(Text)
+    # Topic wall: NULL is a core session (topics/ARCHITECTURE.md).
+    topic_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(32))
     title: Mapped[str | None] = mapped_column(Text)
     title_source: Mapped[str | None] = mapped_column(String(32))
@@ -1088,12 +1090,15 @@ class MemoryRow(Base):
             text("to_tsvector('simple'::regconfig, (subject || ' '::text) || statement)"),
             postgresql_using="gin",
         ),
+        Index("ix_memories_principal_topic", "tenant_id", "principal_id", "topic_id"),
     )
 
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(Text)
     principal_id: Mapped[str] = mapped_column(Text)
     scope: Mapped[str] = mapped_column(Text)
+    # Topic wall: NULL is core (topics/ARCHITECTURE.md).
+    topic_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     subject: Mapped[str] = mapped_column(Text)
     statement: Mapped[str] = mapped_column(Text)
     source_session_id: Mapped[UUID] = mapped_column(

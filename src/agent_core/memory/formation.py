@@ -2537,6 +2537,8 @@ class GovernedMemoryService:
         async def apply(uow: RepositoryUnitOfWork) -> tuple[MemoryRecord, str]:
             sources = source_event_ids or await self._latest_user_source(uow, session_id)
             await self._validate_sources(uow, session_id, sources)
+            # Topic wall: the session's topic, never a model-supplied value.
+            topic_id = (await uow.sessions.get(session_id, self._principal)).topic_id
             rejections = await uow.memories.outstanding_rejections(
                 self._principal.tenant_id, self._principal.principal_id
             )
@@ -2566,6 +2568,7 @@ class GovernedMemoryService:
                 self._principal.principal_id,
                 clean_subject,
                 belief_type,
+                topic_id=topic_id,
             )
             classified = [
                 (
@@ -2752,6 +2755,7 @@ class GovernedMemoryService:
                         derivation,
                         longevity,
                         evidence_at,
+                        topic_id=topic_id,
                     )
                     replacement = proposed.model_copy(
                         update={"flagged_for_review": True, "conflicts_with": [current.id]},
@@ -2807,6 +2811,7 @@ class GovernedMemoryService:
                         derivation,
                         longevity,
                         evidence_at,
+                        topic_id=current.topic_id,
                     )
                     position = await uow.memories.next_position()
                     superseded = current.model_copy(
@@ -2853,6 +2858,7 @@ class GovernedMemoryService:
                 derivation,
                 longevity,
                 evidence_at,
+                topic_id=topic_id,
             )
             stored = await uow.memories.upsert_belief(record)
             await self._append_event(uow, session_id, run_id, "memory.formed", stored)
@@ -4527,6 +4533,7 @@ class GovernedMemoryService:
         derivation: MemoryDerivation,
         longevity: MemoryLongevity,
         evidence_at: datetime | None,
+        topic_id: str | None = None,
     ) -> MemoryRecord:
         now = self._clock.now()
         effective_confidence = confidence if confidence is not None else 0.9
@@ -4553,6 +4560,7 @@ class GovernedMemoryService:
             tenant_id=self._principal.tenant_id,
             principal_id=self._principal.principal_id,
             scope=scope,
+            topic_id=topic_id,
             subject=subject,
             statement=statement,
             source_session_id=source_session_id,

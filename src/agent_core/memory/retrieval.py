@@ -505,6 +505,13 @@ class HybridMemoryRetriever:
                     update={"arms_degraded": [*result.arms_degraded, "source_recovery"]}
                 )
 
+    async def _session_topic(self, uow: RepositoryUnitOfWork, session_id: UUID) -> str | None:
+        try:
+            return (await uow.sessions.get(session_id, self._principal)).topic_id
+        except NotFoundError:
+            # No session to name a topic (evaluation and synthetic recalls): core only.
+            return None
+
     async def _recall(
         self,
         query: RecallQuery,
@@ -535,6 +542,11 @@ class HybridMemoryRetriever:
             )
         )
         effective_query = self._effective_query(effective_query, moment)
+        # Topic wall (topics/ARCHITECTURE.md): the reading session's topic always
+        # replaces whatever topic the caller put on the query.
+        effective_query = effective_query.model_copy(
+            update={"topic_id": await self._session_topic(uow, session_id)}
+        )
         semantic_hits: list[SemanticHit] = []
         semantic_key: str | None = None
         semantic_latency = 0

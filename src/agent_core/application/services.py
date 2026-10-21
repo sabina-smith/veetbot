@@ -105,6 +105,7 @@ class SessionService(Protocol):
         agent_id: str,
         metadata: dict[str, object],
         browser_profile_id: UUID | None = None,
+        topic_id: str | None = None,
     ) -> SessionView: ...
 
     async def get(self, principal: Principal, session_id: UUID) -> SessionView: ...

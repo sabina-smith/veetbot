@@ -443,6 +443,7 @@ class PublicSessionService:
         agent_id: str,
         metadata: dict[str, object],
         browser_profile_id: UUID | None = None,
+        topic_id: str | None = None,
     ) -> SessionView:
         require_scope(principal, "session.write")
         if SESSION_RESERVED_METADATA_KEYS.intersection(metadata):
@@ -481,6 +482,7 @@ class PublicSessionService:
                 agent_id=agent.id,
                 agent_version=agent.version,
                 status=SessionStatus.ACTIVE,
+                topic_id=topic_id,
                 metadata=bound_metadata,
                 created_at=now,
                 updated_at=now,

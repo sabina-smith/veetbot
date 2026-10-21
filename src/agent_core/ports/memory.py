@@ -53,6 +53,8 @@ class MemoryStore(Protocol):
         principal_id: str,
         subject: str,
         belief_type: BeliefType,
+        *,
+        topic_id: str | None = None,
     ) -> list[MemoryRecord]: ...
 
     async def upsert_belief(self, belief: MemoryRecord) -> MemoryRecord: ...

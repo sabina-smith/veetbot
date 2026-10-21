@@ -184,6 +184,13 @@ def _memory_values(value: MemoryRecord) -> dict[str, Any]:
     return data
 
 
+def _topic_wall(topic_id: str | None) -> Any:
+    """Core (NULL) is visible everywhere; a topic's beliefs only inside that topic."""
+    if topic_id is None:
+        return MemoryRow.topic_id.is_(None)
+    return or_(MemoryRow.topic_id.is_(None), MemoryRow.topic_id == topic_id)
+
+
 def _episode(row: IntegratedEpisodeRow) -> IntegratedEpisode:
     return IntegratedEpisode(
         id=row.id,
@@ -361,6 +368,7 @@ def _memory(row: MemoryRow) -> MemoryRecord:
         tenant_id=row.tenant_id,
         principal_id=row.principal_id,
         scope=row.scope,
+        topic_id=row.topic_id,
         subject=row.subject,
         statement=row.statement,
         source_session_id=row.source_session_id,
@@ -562,6 +570,7 @@ class PostgresMemoryStore:
             or_(MemoryRow.valid_to.is_(None), MemoryRow.valid_to > as_of),
             or_(MemoryRow.expires_at.is_(None), MemoryRow.expires_at > as_of),
             MemoryRow.sensitivity.in_(_allowed_sensitivities(query.sensitivity_ceiling)),
+            _topic_wall(query.topic_id),
         ]
         if query.people_scope is not None:
             predicates.append(
@@ -732,6 +741,7 @@ class PostgresMemoryStore:
             MemoryRow.tenant_id == query.tenant_id,
             MemoryRow.principal_id == query.principal_id,
             ~MemoryRow.erasure_pending,
+            _topic_wall(query.topic_id),
             MemoryRow.sensitivity.in_(allowed),
             payload["sensitivity"].astext.in_(allowed),
             sql_cast(payload["valid_from"].astext, DateTime(timezone=True)) <= at,
@@ -855,6 +865,8 @@ class PostgresMemoryStore:
         principal_id: str,
         subject: str,
         belief_type: BeliefType,
+        *,
+        topic_id: str | None = None,
     ) -> list[MemoryRecord]:
         rows = list(
             (
@@ -863,6 +875,7 @@ class PostgresMemoryStore:
                         MemoryRow.tenant_id == tenant_id,
                         MemoryRow.principal_id == principal_id,
                         ~MemoryRow.erasure_pending,
+                        _topic_wall(topic_id),
                         func.lower(MemoryRow.subject) == subject.casefold(),
                         MemoryRow.belief_type == belief_type.value,
                         MemoryRow.status.in_(_LIVE),

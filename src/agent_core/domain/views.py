@@ -99,6 +99,7 @@ class SessionView(BaseModel):
     active_run_id: UUID | None
     last_run_id: UUID | None
     folder_id: UUID | None = None
+    topic_id: str | None = None
 
     @classmethod
     def from_session(
@@ -119,6 +120,7 @@ class SessionView(BaseModel):
             active_run_id=None if active is None else active.id,
             last_run_id=None if latest is None else latest.id,
             folder_id=folder_id,
+            topic_id=session.topic_id,
         )
 
 

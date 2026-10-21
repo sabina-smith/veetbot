@@ -273,6 +273,8 @@ class CreateSessionRequest(BaseModel):
     agent_id: str = Field(min_length=1)
     metadata: dict[str, object] = Field(default_factory=dict)
     browser_profile_id: UUID | None = None
+    # Topic wall: omitted creates a core session (topics/ARCHITECTURE.md).
+    topic_id: str | None = Field(default=None, min_length=1, max_length=128)
 
 
 class MessageRequest(BaseModel):
@@ -709,6 +711,7 @@ def create_app(
                 body.agent_id,
                 body.metadata,
                 browser_profile_id=body.browser_profile_id,
+                topic_id=body.topic_id,
             )
         except SessionMetadataValidationError as exc:
             raise MalformedRequestError("session metadata is malformed") from exc

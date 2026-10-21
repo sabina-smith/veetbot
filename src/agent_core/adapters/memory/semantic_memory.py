@@ -102,8 +102,9 @@ class InMemorySemanticMemoryIndex:
                 record = await self._memories.get(belief_id, principal)
             except NotFoundError:
                 return None
+            # Index a belief from inside its own topic, so the topic wall admits it.
             query = capture_query(principal, belief_id).model_copy(
-                update={"current_scope": record.scope}
+                update={"current_scope": record.scope, "topic_id": record.topic_id}
             )
             if not await self._memories._eligible_records(query, lexical=False):
                 return None
