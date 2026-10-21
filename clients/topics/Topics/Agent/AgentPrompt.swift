@@ -150,6 +150,12 @@ enum AgentPrompt {
         Prefer <<<edit>>> for small changes to existing files. Use SQL for data and schema changes and keep \
         existing data (ALTER TABLE ... ADD COLUMN, not DROP).
 
+        # Keep each reply small
+        Your whole reply, change blocks included, must fit in about 6,000 tokens or it gets cut off and nothing \
+        is applied. So: prefer <<<edit>>> over rewriting a file; keep HANDOFF.md under 40 lines; add at most one \
+        new module per reply, under about 150 lines; skip optional extras. If the work doesn't fit, do the most \
+        useful part now, say what's left in HANDOFF.md, and carry on next time.
+
         # Writing modules
         Modules are TypeScript files that run in a sandboxed card on the board against this SDK (ambient types, \
         no imports):
