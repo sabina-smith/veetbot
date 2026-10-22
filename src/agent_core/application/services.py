@@ -70,6 +70,7 @@ from agent_core.domain.schedules import (
     ScheduleState,
 )
 from agent_core.domain.surfaces import IssuedPairingCode, Pairing
+from agent_core.domain.topic_suggestions import TopicSuggestionView
 from agent_core.domain.topics import TopicCreateRequest, TopicUpdateRequest, TopicView
 from agent_core.domain.views import (
     ApprovalFilters,
@@ -934,3 +935,19 @@ class TopicService(Protocol):
     async def update(
         self, principal: Principal, topic_id: str, request: TopicUpdateRequest
     ) -> TopicView: ...
+
+    async def list_suggestions(
+        self, principal: Principal, topic_id: str
+    ) -> builtins.list[TopicSuggestionView]: ...
+
+    async def accept_suggestion(
+        self, principal: Principal, topic_id: str, suggestion_id: UUID
+    ) -> TopicSuggestionView: ...
+
+    async def dismiss_suggestion(
+        self, principal: Principal, topic_id: str, suggestion_id: UUID
+    ) -> TopicSuggestionView: ...
+
+    async def review(
+        self, principal: Principal, topic_id: str
+    ) -> builtins.list[TopicSuggestionView]: ...

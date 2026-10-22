@@ -2010,6 +2010,36 @@ class TopicRow(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
+class TopicSuggestionRow(Base):
+    """A suggestion a topic's agent made; the owner accepts or dismisses it."""
+
+    __tablename__ = "topic_suggestions"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "principal_id",
+            "topic_id",
+            "fingerprint",
+            name="uq_topic_suggestions_fingerprint",
+        ),
+        Index("ix_topic_suggestions_topic", "tenant_id", "principal_id", "topic_id", "created_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(Text)
+    principal_id: Mapped[str] = mapped_column(Text)
+    topic_id: Mapped[str] = mapped_column(Text)
+    kind: Mapped[str] = mapped_column(Text)
+    title: Mapped[str] = mapped_column(Text)
+    rationale: Mapped[str] = mapped_column(Text)
+    instruction_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    schedule: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    fingerprint: Mapped[str] = mapped_column(Text)
+    state: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class SessionFolderMembershipRow(Base):
     """One row per filed session: the primary key is the single-parent rule."""
 

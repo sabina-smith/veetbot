@@ -61,6 +61,22 @@ flowchart LR
 - **Decisions:** `proposed` → `accepted` (applied) or `dismissed`. A
   suggestion's fingerprint is remembered, so a dismissed one is never re-made.
 
+API (all under the owner's `session.read` / `session.write` scopes):
+
+| Route | Does |
+| --- | --- |
+| `GET /v1/topics`, `POST /v1/topics`, `PATCH /v1/topics/{id}` | List, create, rename or change a topic's `instructions` |
+| `POST /v1/sessions` with `topic_id` | Start a chat run by that topic's agent |
+| `GET /v1/topics/{id}/suggestions` | The topic's open suggestions |
+| `POST /v1/topics/{id}/suggestions/review` | Run a review now; returns only new suggestions |
+| `POST /v1/topics/{id}/suggestions/{sid}/accept` | Apply it (instructions today; schedules next) |
+| `POST /v1/topics/{id}/suggestions/{sid}/dismiss` | Dismiss it for good |
+
+A review reads at most the topic's 20 most recent sessions and 40 latest user
+messages (500 characters each), makes one structured model call on the
+default chat model, and stores at most three suggestions. With the scripted
+development model it proposes nothing.
+
 ## Superseded: the walled design (kept for history)
 
 Everything from here down to "Mapping onto Veetbot" describes the first design,

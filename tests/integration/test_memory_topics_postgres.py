@@ -108,3 +108,46 @@ async def test_postgres_topics_share_recall_and_rank_the_current_topic_first(
             app, household_session, f"Garden {marker} bed three sun", f"bed {marker}"
         )
         assert again.id == garden.id and again.topic_id == f"garden-{marker}"
+
+
+async def test_postgres_topic_suggestions_dedupe_and_decide(tmp_path: Path) -> None:
+    from agent_core.domain.topic_suggestions import (
+        SuggestionKind,
+        SuggestionState,
+        TopicSuggestion,
+        suggestion_fingerprint,
+    )
+
+    topic_id = f"garden-{uuid4().hex[:10]}"
+    async with build(settings=_settings(tmp_path), storage="postgres") as app:
+        owner = app.principal
+        now = app.clock.now()
+
+        def made(text: str) -> TopicSuggestion:
+            return TopicSuggestion(
+                id=uuid4(),
+                tenant_id=owner.tenant_id,
+                principal_id=owner.principal_id,
+                topic_id=topic_id,
+                kind=SuggestionKind.INSTRUCTIONS,
+                title="Units",
+                rationale="Seen in chats.",
+                instruction_text=text,
+                fingerprint=suggestion_fingerprint(SuggestionKind.INSTRUCTIONS, text),
+                state=SuggestionState.PROPOSED,
+                created_at=now,
+            )
+
+        first = made("Use metric units.")
+        async with app.uow_factory() as uow:
+            assert await uow.topic_suggestions.add(first)
+            assert not await uow.topic_suggestions.add(made("use  METRIC units."))
+        async with app.uow_factory() as uow:
+            await uow.topic_suggestions.decide(
+                first.model_copy(update={"state": SuggestionState.DISMISSED, "decided_at": now})
+            )
+        async with app.uow_factory() as uow:
+            assert (
+                await uow.topic_suggestions.get(owner, first.id)
+            ).state is SuggestionState.DISMISSED
+            assert await uow.topic_suggestions.list(owner, topic_id, SuggestionState.PROPOSED) == []

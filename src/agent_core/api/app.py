@@ -107,6 +107,7 @@ from agent_core.domain.schedules import (
     ScheduleRecord,
     ScheduleState,
 )
+from agent_core.domain.topic_suggestions import TopicSuggestionView
 from agent_core.domain.topics import TopicCreateRequest, TopicUpdateRequest, TopicView
 from agent_core.domain.views import (
     ApprovalFilters,
@@ -2040,8 +2041,55 @@ def create_app(
             body: TopicUpdateRequest,
             authenticated: Annotated[Principal, secured("session.write")],
         ) -> TopicView:
-            """Rename a topic or change whether it is sealed."""
+            """Rename a topic or change its agent's standing instructions."""
             return await topics.update(authenticated, topic_id, body)
+
+        @app.get(
+            "/v1/topics/{topic_id}/suggestions", openapi_extra={"required_scope": "session.read"}
+        )
+        async def list_topic_suggestions(
+            topic_id: str,
+            response: Response,
+            authenticated: Annotated[Principal, secured("session.read")],
+        ) -> Page[TopicSuggestionView]:
+            """The topic agent's open suggestions, oldest first."""
+            response.headers["Cache-Control"] = PRIVATE_NO_STORE
+            return Page(items=await topics.list_suggestions(authenticated, topic_id))
+
+        @app.post(
+            "/v1/topics/{topic_id}/suggestions/{suggestion_id}/accept",
+            openapi_extra={"required_scope": "session.write"},
+        )
+        async def accept_topic_suggestion(
+            topic_id: str,
+            suggestion_id: UUID,
+            authenticated: Annotated[Principal, secured("session.write")],
+        ) -> TopicSuggestionView:
+            """Accept a suggestion, applying it."""
+            return await topics.accept_suggestion(authenticated, topic_id, suggestion_id)
+
+        @app.post(
+            "/v1/topics/{topic_id}/suggestions/{suggestion_id}/dismiss",
+            openapi_extra={"required_scope": "session.write"},
+        )
+        async def dismiss_topic_suggestion(
+            topic_id: str,
+            suggestion_id: UUID,
+            authenticated: Annotated[Principal, secured("session.write")],
+        ) -> TopicSuggestionView:
+            """Dismiss a suggestion; it is never made again."""
+            return await topics.dismiss_suggestion(authenticated, topic_id, suggestion_id)
+
+        @app.post(
+            "/v1/topics/{topic_id}/suggestions/review",
+            openapi_extra={"required_scope": "session.write"},
+        )
+        async def review_topic(
+            topic_id: str,
+            authenticated: Annotated[Principal, secured("session.write")],
+        ) -> Page[TopicSuggestionView]:
+            """Have the topic's agent review recent use and propose changes."""
+            return Page(items=await topics.review(authenticated, topic_id))
 
     @app.get("/health/live", openapi_extra={"required_scope": None})
     async def health_live(response: Response) -> dict[str, str]:
