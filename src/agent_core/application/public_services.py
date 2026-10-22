@@ -40,6 +40,7 @@ from agent_core.domain.agents import (
     Principal,
     chat_model_variant,
     run_limits_for_session,
+    topic_agent_variant,
 )
 from agent_core.domain.approvals import (
     ApprovalCursor,
@@ -459,10 +460,13 @@ class PublicSessionService:
             raise SessionMetadataValidationError("session metadata exceeds 8 KiB")
         now = self._clock.now()
         async with self._uow_factory() as uow:
-            if topic_id is not None:
-                # A session's topic must be one the owner created (NotFoundError).
-                await uow.topics.get(principal, topic_id)
             agent = await self._resolve_agent(uow, agent_id, principal)
+            if topic_id is not None:
+                # A session's topic must be one the owner created (NotFoundError),
+                # and runs that topic's own agent.
+                topic = await uow.topics.get(principal, topic_id)
+                agent = topic_agent_variant(agent, topic.id, topic.name, topic.instructions)
+                await uow.agents.put(agent)
             if browser_profile_id is not None:
                 profile = await uow.browser_profiles.get(browser_profile_id, principal)
                 if profile.status is not BrowserProfileStatus.READY:

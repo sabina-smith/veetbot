@@ -20,6 +20,9 @@ class Topic(BaseModel):
     tenant_id: str = Field(min_length=1)
     principal_id: str = Field(min_length=1)
     name: str = Field(min_length=1, max_length=120)
+    # The owner's standing instructions to this topic's agent.
+    instructions: str = Field(default="", max_length=8000)
+    # Not enforced since 2026-10-21 (topics/ARCHITECTURE.md); kept for the column.
     sealed: bool = False
     created_at: datetime
     updated_at: datetime
@@ -37,6 +40,7 @@ class TopicView(BaseModel):
 
     id: str
     name: str
+    instructions: str
     sealed: bool
     created_at: datetime
     updated_at: datetime
@@ -46,6 +50,7 @@ class TopicView(BaseModel):
         return cls(
             id=topic.id,
             name=topic.name,
+            instructions=topic.instructions,
             sealed=topic.sealed,
             created_at=topic.created_at,
             updated_at=topic.updated_at,
@@ -57,6 +62,7 @@ class TopicCreateRequest(BaseModel):
 
     id: str = Field(pattern=TOPIC_ID_PATTERN)
     name: str = Field(min_length=1, max_length=120)
+    instructions: str = Field(default="", max_length=8000)
     sealed: bool = False
 
     @field_validator("id")
@@ -71,4 +77,5 @@ class TopicUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str | None = Field(default=None, min_length=1, max_length=120)
+    instructions: str | None = Field(default=None, max_length=8000)
     sealed: bool | None = None

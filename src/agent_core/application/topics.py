@@ -35,6 +35,7 @@ class PublicTopicService:
                 tenant_id=principal.tenant_id,
                 principal_id=principal.principal_id,
                 name=request.name,
+                instructions=request.instructions,
                 sealed=request.sealed,
                 created_at=now,
                 updated_at=now,
@@ -50,6 +51,8 @@ class PublicTopicService:
             changes: dict[str, object] = {"updated_at": self._clock.now()}
             if request.name is not None:
                 changes["name"] = request.name
+            if request.instructions is not None:
+                changes["instructions"] = request.instructions
             if request.sealed is not None:
                 changes["sealed"] = request.sealed
             return TopicView.from_topic(await uow.topics.put(current.model_copy(update=changes)))

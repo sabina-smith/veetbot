@@ -2004,6 +2004,7 @@ class TopicRow(Base):
     principal_id: Mapped[str] = mapped_column(Text, primary_key=True)
     id: Mapped[str] = mapped_column(Text, primary_key=True)
     name: Mapped[str] = mapped_column(Text)
+    instructions: Mapped[str] = mapped_column(Text, server_default=text("''"))
     sealed: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

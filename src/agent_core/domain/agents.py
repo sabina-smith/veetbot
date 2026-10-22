@@ -76,6 +76,30 @@ def chat_model_variant(agent: AgentSpec, model_policy: str) -> AgentSpec:
     return variant.model_copy(update={"version": content_addressed_agent_version(variant)})
 
 
+def topic_agent_variant(agent: AgentSpec, topic_id: str, name: str, instructions: str) -> AgentSpec:
+    """The agent that runs a topic (topics/ARCHITECTURE.md).
+
+    Its id is derived from the agent and the topic, so it never becomes the
+    latest version of the base agent; its version follows the topic's
+    instructions, so a session keeps the instructions it started with.
+    """
+
+    guidance = (
+        f"\n\nTopic: you are the owner's {name} agent. Lead with what matters to "
+        f"{name}; every memory and person is shared across the owner's topics."
+    )
+    if instructions.strip():
+        guidance += f"\nThe owner's standing instructions for {name}:\n{instructions.strip()}"
+    variant = agent.model_copy(
+        update={
+            "id": uuid5(agent.id, f"topic:{topic_id}"),
+            "instructions": agent.instructions + guidance,
+        },
+        deep=True,
+    )
+    return variant.model_copy(update={"version": content_addressed_agent_version(variant)})
+
+
 class Principal(BaseModel):
     """The identity and authority stamped onto a run at submission."""
 

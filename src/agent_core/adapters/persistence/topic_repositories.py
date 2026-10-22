@@ -18,6 +18,7 @@ def _topic(row: TopicRow) -> Topic:
         tenant_id=row.tenant_id,
         principal_id=row.principal_id,
         name=row.name,
+        instructions=row.instructions,
         sealed=row.sealed,
         created_at=row.created_at,
         updated_at=row.updated_at,
@@ -54,7 +55,7 @@ class PostgresTopicStore:
             .values(**values)
             .on_conflict_do_update(
                 index_elements=["tenant_id", "principal_id", "id"],
-                set_={key: values[key] for key in ("name", "sealed", "updated_at")},
+                set_={key: values[key] for key in ("name", "instructions", "sealed", "updated_at")},
             )
         )
         return topic
