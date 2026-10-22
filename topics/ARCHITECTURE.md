@@ -139,3 +139,27 @@ say-so) is the only way through it.
   need a dev setting to choose a real model policy.
 - The Apple client requires HTTPS and a bearer token; locally, the API is served
   over HTTPS on `127.0.0.1:8443` and dev mode ignores the token.
+
+## Boards, modules and check-ins (prototype, 2026-10-21)
+
+Agreed after the first design pass; built in `clients/topics/`.
+
+- **A board is code built from building blocks.** Each topic's board is
+  `board.json` plus TypeScript modules written against a small SDK: UI
+  building blocks, `db` (the topic's own SQLite file), `draw` (SVG
+  graphics), `schedule` (label-only writes to the shared plane),
+  `proposals` and `agent`. Modules run in sandboxed web views with no
+  network access; the app shell stays native.
+- **A topic's workspace is a git repository**: the agent's notes
+  (`AGENT.md` identity, `HANDOFF.md` rewritten each check-in), the board,
+  the modules and the database. Every agent change is a commit, so it can
+  be undone.
+- **The agent doesn't run continuously.** A check-in reads the notes and
+  the board, does bounded work, writes changes as blocks the app applies
+  all or nothing, and leaves notes for the next one. One Veetbot session
+  per topic keeps it the same helper to the owner. Locally the app applies
+  the changes; the planned cloud version gives each topic its own
+  Namespace machine for this.
+- **The agent works on the board, not in chat.** Findings go into rows;
+  decisions it needs become proposals attached to rows, which the owner
+  resolves in the sidebar. The owner never sees internals.

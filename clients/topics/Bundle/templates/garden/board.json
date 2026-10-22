@@ -1,0 +1,9 @@
+{
+  "columns": 12,
+  "modules": [
+    { "id": "garden-map", "title": "Map", "span": 7 },
+    { "id": "shopping", "title": "Shopping", "span": 5 },
+    { "id": "todo", "title": "To do", "span": 4 },
+    { "id": "tool-shed", "title": "Tool shed", "span": 4 }
+  ]
+}
