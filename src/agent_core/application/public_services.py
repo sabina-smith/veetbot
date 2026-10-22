@@ -2239,6 +2239,7 @@ class PublicMemoryService:
         cursor: str | None,
         flagged: bool | None = None,
         include_derived: bool = False,
+        topic: str | None = None,
     ) -> Page[MemoryView | DerivedMemoryView]:
         require_scope(principal, "memory.read")
         effective_limit = min(max(limit, 1), 200)
@@ -2255,6 +2256,9 @@ class PublicMemoryService:
             limit=effective_limit,
             cursor=decoded,
             flagged_for_review=flagged,
+            # "core" names the core layer; any other value is one topic's own beliefs.
+            filter_topic=topic is not None,
+            topic_id=None if topic in (None, "core") else topic,
         )
         if include_derived and not self._derived_enabled:
             raise MemoryCursorError("derived memory browsing is unavailable")

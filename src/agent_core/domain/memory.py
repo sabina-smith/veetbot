@@ -750,6 +750,10 @@ class MemoryBrowseQuery(BaseModel):
     subject: str | None = None
     session_id: UUID | None = None
     text: str | None = None
+    # Owner browsing is topic-wide by default; filter_topic narrows it to exactly
+    # one topic's own beliefs (topic_id None: core only).
+    filter_topic: bool = False
+    topic_id: str | None = Field(default=None, min_length=1, max_length=128)
     limit: int = Field(default=50, ge=1, le=200)
     cursor: tuple[int, UUID] | None = None
     # None selects both; True the review queue; False everything already reviewed

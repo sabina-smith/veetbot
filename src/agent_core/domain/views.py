@@ -355,6 +355,8 @@ class MemoryView(BaseModel):
     status: MemoryStatus
     polarity: Polarity
     scope: str
+    # Topic wall (topics/ARCHITECTURE.md): None is core.
+    topic_id: str | None = None
     portability: Portability
     authority: MemoryAuthority
     sensitivity: Sensitivity
@@ -390,6 +392,7 @@ class MemoryView(BaseModel):
             status=record.status,
             polarity=record.polarity,
             scope=record.scope,
+            topic_id=record.topic_id,
             portability=record.portability,
             authority=record.authority,
             sensitivity=record.sensitivity,

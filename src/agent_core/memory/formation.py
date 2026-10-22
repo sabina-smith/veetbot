@@ -75,6 +75,7 @@ from agent_core.memory.profiles import (
     PersonaNominationProfile,
     UsageDeltas,
 )
+from agent_core.memory.topics import session_topic
 from agent_core.ports.determinism import Clock, IdFactory
 from agent_core.ports.memory import MemoryCandidateExtractor
 from agent_core.ports.persistence import RepositoryUnitOfWork, UnitOfWorkFactory
@@ -2876,7 +2877,10 @@ class GovernedMemoryService:
             return await apply(uow)
 
     async def _retraction_targets(
-        self, uow: RepositoryUnitOfWork, candidate: MemoryCandidate
+        self,
+        uow: RepositoryUnitOfWork,
+        candidate: MemoryCandidate,
+        session_id: UUID | None = None,
     ) -> list[MemoryRecord]:
         """The live beliefs an automatic retraction ends.
 
@@ -2889,7 +2893,16 @@ class GovernedMemoryService:
         deny the claim are never targets.
         """
 
-        live = await uow.memories.list_memories(self._principal, limit=500)
+        live = await uow.memories.list_memories(
+            self._principal,
+            limit=500,
+            topic_wall=True,
+            topic_id=(
+                None
+                if session_id is None
+                else await session_topic(uow, session_id, self._principal)
+            ),
+        )
         subject_key = " ".join(candidate.subject.split()).casefold()
         # Matched on lemmas and on the verb: "no longer runs outdoors" ends
         # "is running outdoors every day" and "goes running outdoors most
@@ -3326,7 +3339,7 @@ class GovernedMemoryService:
                         and candidate.polarity is Polarity.RETRACT
                         and authority is not MemoryAuthority.USER
                     ):
-                        targets = await self._retraction_targets(uow, candidate)
+                        targets = await self._retraction_targets(uow, candidate, session_id)
                         if not targets:
                             rejected += 1
                             decisions["skipped_unmatched_retraction"] += 1

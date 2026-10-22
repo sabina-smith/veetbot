@@ -981,6 +981,8 @@ class PostgresMemoryStore:
         include_inactive: bool = False,
         session_id: UUID | None = None,
         limit: int = 200,
+        topic_wall: bool = False,
+        topic_id: str | None = None,
     ) -> list[MemoryRecord]:
         predicates: list[Any] = [
             MemoryRow.tenant_id == principal.tenant_id,
@@ -991,6 +993,8 @@ class PostgresMemoryStore:
             predicates.append(MemoryRow.status.in_(_LIVE))
         if session_id is not None:
             predicates.append(MemoryRow.source_session_id == session_id)
+        if topic_wall:
+            predicates.append(_topic_wall(topic_id))
         rows = list(
             (
                 await self._session.scalars(
@@ -1022,6 +1026,8 @@ class PostgresMemoryStore:
             predicates.append(func.lower(MemoryRow.subject) == query.subject.lower())
         if query.session_id is not None:
             predicates.append(MemoryRow.source_session_id == query.session_id)
+        if query.filter_topic:
+            predicates.append(MemoryRow.topic_id.is_not_distinct_from(query.topic_id))
         if query.flagged_for_review is not None:
             predicates.append(MemoryRow.flagged_for_review.is_(query.flagged_for_review))
         terms = lexical_query_terms(query.text)

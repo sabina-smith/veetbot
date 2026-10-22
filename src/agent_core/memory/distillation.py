@@ -68,6 +68,7 @@ from agent_core.memory.formation import (
     portability_ceiling,
     split_source_clauses,
 )
+from agent_core.memory.topics import events_topic
 from agent_core.model.streaming import ModelStreamError, collect_turn
 from agent_core.ports.determinism import Clock, IdFactory
 from agent_core.ports.memory import MemoryCandidateExtractor
@@ -1247,7 +1248,12 @@ class NemoriAssistedCandidateExtractor:
             live_memories = (
                 []
                 if self._source_isolated
-                else await uow.memories.list_memories(principal, limit=50)
+                else await uow.memories.list_memories(
+                    principal,
+                    limit=50,
+                    topic_wall=True,
+                    topic_id=await events_topic(uow, events, principal),
+                )
             )
             # The anticipation cue is the user's text before a segment's
             # earliest episode. A session's already-consolidated text is still

@@ -84,7 +84,9 @@ class PeopleContextService:
         neighbors: set[UUID] = set()
         projected: set[UUID] = set()
         async with self._factory() as uow, uow.people.lock(principal):
-            await uow.sessions.get(session_id, principal)
+            session = await uow.sessions.get(session_id, principal)
+            # Topic wall: people facts are read from inside the session's topic.
+            query = query.model_copy(update={"topic_id": session.topic_id})
             selection_belief_ids: tuple[UUID, ...] = ()
             if relationship_discovery:
                 current, _, selection_belief_ids = await self._relationship_people(
@@ -231,6 +233,7 @@ class PeopleContextService:
         at = query.as_of or self._retriever.current_time()
         if (
             SENSITIVITY_ORDER[belief.sensitivity] > SENSITIVITY_ORDER[ceiling]
+            or belief.topic_id not in (None, query.topic_id)
             or (query.as_of is None and belief.status not in LIVE_MEMORY_STATUSES)
             or belief.valid_from > at
             or (belief.valid_to is not None and belief.valid_to <= at)

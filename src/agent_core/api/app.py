@@ -1689,6 +1689,7 @@ def create_app(
         text: str | None = None,
         flagged: bool | None = None,
         include_derived: bool = False,
+        topic: Annotated[str | None, Query(min_length=1, max_length=128)] = None,
     ) -> Page[MemoryView | DerivedMemoryView]:
         # A belief body is principal-scoped and sensitivity-bearing, so no
         # shared or on-disk cache may keep it; the artifact content route
@@ -1711,6 +1712,7 @@ def create_app(
                 cursor=cursor,
                 flagged=flagged,
                 include_derived=include_derived,
+                topic=topic,
             )
         except MemoryCursorError as exc:
             raise MalformedRequestError("memory cursor is malformed") from exc

@@ -511,6 +511,7 @@ class MemoryReadService(Protocol):
         cursor: str | None,
         flagged: bool | None = None,
         include_derived: bool = False,
+        topic: str | None = None,
     ) -> Page[MemoryView | DerivedMemoryView]: ...
 
     async def get(

@@ -477,6 +477,8 @@ class InMemoryMemoryStore:
         include_inactive: bool = False,
         session_id: UUID | None = None,
         limit: int = 200,
+        topic_wall: bool = False,
+        topic_id: str | None = None,
     ) -> list[MemoryRecord]:
         async with self._transaction.owner((principal.tenant_id, principal.principal_id)):
             records = [
@@ -487,6 +489,7 @@ class InMemoryMemoryStore:
                 and record.principal_id == principal.principal_id
                 and (include_inactive or record.status in _LIVE_MEMORY)
                 and (session_id is None or record.source_session_id == session_id)
+                and (not topic_wall or record.topic_id in (None, topic_id))
             ]
             records.sort(key=lambda item: (-item.store_position, str(item.id)))
             return [item.model_copy(deep=True) for item in records[:limit]]
@@ -516,6 +519,8 @@ class InMemoryMemoryStore:
                 if subject is not None and record.subject.lower() != subject:
                     continue
                 if query.session_id is not None and record.source_session_id != query.session_id:
+                    continue
+                if query.filter_topic and record.topic_id != query.topic_id:
                     continue
                 if (
                     query.flagged_for_review is not None

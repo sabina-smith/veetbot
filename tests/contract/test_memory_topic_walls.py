@@ -12,7 +12,8 @@ from agent_core.adapters.memory.transactions import MemoryTransaction
 from agent_core.adapters.persistence.unit_of_work import MemoryUnitOfWorkFactory
 from agent_core.domain.events import NewEvent
 from agent_core.domain.memory import BeliefType, MemoryRecord, Sensitivity
-from tests.contract.memory_fixtures import formation_stack, memory, recall_query
+from agent_core.domain.reconsolidation import compatible
+from tests.contract.memory_fixtures import browse_query, formation_stack, memory, recall_query
 from tests.contract.support import NOW, PRINCIPAL_ID, SESSION_ID, TENANT, principal
 
 
@@ -117,3 +118,35 @@ async def test_formation_stamps_new_beliefs_with_the_sessions_topic() -> None:
         source_event_ids=[event.sequence],
     )
     assert record.topic_id == "garden"
+
+
+async def test_list_memories_is_owner_wide_unless_walled_to_a_topic() -> None:
+    store, core, garden, household = await _seeded()
+    assert _ids(await store.list_memories(principal())) == {
+        core.id.int,
+        garden.id.int,
+        household.id.int,
+    }
+    walled = await store.list_memories(principal(), topic_wall=True, topic_id="garden")
+    assert _ids(walled) == {core.id.int, garden.id.int}
+    core_only = await store.list_memories(principal(), topic_wall=True)
+    assert _ids(core_only) == {core.id.int}
+
+
+def test_reconsolidation_never_groups_beliefs_across_topics() -> None:
+    garden, household, core = _in("garden", 611, 1), _in("household", 612, 2), _in(None, 613, 3)
+    assert compatible(garden, garden.model_copy(update={"id": UUID(int=614)}))
+    assert not compatible(garden, household)
+    assert not compatible(garden, core)
+
+
+async def test_the_owner_browses_everything_or_exactly_one_topic() -> None:
+    store, core, garden, household = await _seeded()
+    everything = await store.browse(browse_query())
+    assert _ids(everything) == {core.id.int, garden.id.int, household.id.int}
+    only_garden = await store.browse(
+        browse_query().model_copy(update={"filter_topic": True, "topic_id": "garden"})
+    )
+    assert _ids(only_garden) == {garden.id.int}
+    only_core = await store.browse(browse_query().model_copy(update={"filter_topic": True}))
+    assert _ids(only_core) == {core.id.int}
