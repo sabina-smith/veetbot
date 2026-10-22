@@ -93,3 +93,40 @@ async def test_postgres_topic_wall_matches_the_contract(tmp_path: Path) -> None:
         result = await app.memory_retriever.recall(forged, session_id=garden_session)
         assert {item.belief_id for item in result.items} <= {core.id, garden.id}
         assert household.id not in {item.belief_id for item in result.items}
+
+
+async def test_postgres_topics_registry_and_cross_topic_promotion(tmp_path: Path) -> None:
+    from agent_core.domain.topics import Topic
+
+    marker = uuid4().hex[:10]
+    async with build(settings=_settings(tmp_path), storage="postgres") as app:
+        owner = app.principal
+        now = app.clock.now()
+        topic_ids = {name: f"{name}-{marker}" for name in ("garden", "household", "health")}
+        async with app.uow_factory() as uow:
+            for name, topic_id in topic_ids.items():
+                await uow.topics.put(
+                    Topic(
+                        id=topic_id,
+                        tenant_id=owner.tenant_id,
+                        principal_id=owner.principal_id,
+                        name=name,
+                        sealed=name == "health",
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
+        async with app.uow_factory() as uow:
+            listed = {topic.id: topic.sealed for topic in await uow.topics.list(owner)}
+        assert {topic_ids[name]: name == "health" for name in topic_ids}.items() <= listed.items()
+
+        statement, subject = f"User {marker} is allergic to bees", f"bee allergy {marker}"
+        sessions = {
+            name: await app.sessions.create(topic_id=topic_id)
+            for name, topic_id in topic_ids.items()
+        }
+        sealed = await _remember(app, sessions["health"], statement, subject)
+        first = await _remember(app, sessions["garden"], statement, subject)
+        promoted = await _remember(app, sessions["household"], statement, subject)
+        assert promoted.id == first.id and promoted.topic_id is None
+        assert sealed.id != first.id and sealed.topic_id == topic_ids["health"]

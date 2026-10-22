@@ -1995,6 +1995,20 @@ class ThreadFolderRow(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
+class TopicRow(Base):
+    """An owner's topic (topics/ARCHITECTURE.md); sealed topics share nothing out."""
+
+    __tablename__ = "topics"
+
+    tenant_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    principal_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    id: Mapped[str] = mapped_column(Text, primary_key=True)
+    name: Mapped[str] = mapped_column(Text)
+    sealed: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 class SessionFolderMembershipRow(Base):
     """One row per filed session: the primary key is the single-parent rule."""
 

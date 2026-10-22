@@ -5,6 +5,8 @@ See topics/ARCHITECTURE.md. ``topic_id`` None is core.
 
 from uuid import UUID
 
+import pytest
+
 from agent_core.adapters.determinism import FixedClock
 from agent_core.adapters.memory.in_memory import InMemoryMemoryStore
 from agent_core.adapters.memory.reconsolidation_index import ReconsolidationIndex
@@ -13,6 +15,8 @@ from agent_core.adapters.persistence.unit_of_work import MemoryUnitOfWorkFactory
 from agent_core.domain.events import NewEvent
 from agent_core.domain.memory import BeliefType, MemoryRecord, Sensitivity
 from agent_core.domain.reconsolidation import compatible
+from agent_core.domain.topics import Topic
+from agent_core.memory.formation import GovernedMemoryService
 from tests.contract.memory_fixtures import browse_query, formation_stack, memory, recall_query
 from tests.contract.support import NOW, PRINCIPAL_ID, SESSION_ID, TENANT, principal
 
@@ -150,3 +154,81 @@ async def test_the_owner_browses_everything_or_exactly_one_topic() -> None:
     assert _ids(only_garden) == {garden.id.int}
     only_core = await store.browse(browse_query().model_copy(update={"filter_topic": True}))
     assert _ids(only_core) == {core.id.int}
+
+
+async def _register(factory: MemoryUnitOfWorkFactory, topic_id: str, *, sealed: bool) -> None:
+    owner = principal()
+    async with factory() as uow:
+        await uow.topics.put(
+            Topic(
+                id=topic_id,
+                tenant_id=owner.tenant_id,
+                principal_id=owner.principal_id,
+                name=topic_id,
+                sealed=sealed,
+                created_at=NOW,
+                updated_at=NOW,
+            )
+        )
+
+
+async def _learn(
+    factory: MemoryUnitOfWorkFactory, service: GovernedMemoryService, session_id: UUID
+) -> MemoryRecord:
+    statement = "User is allergic to bee stings"
+    async with factory() as uow:
+        event = await uow.events.append(
+            NewEvent(
+                session_id=session_id,
+                run_id=None,
+                event_type="user.message.created",
+                actor_type="principal",
+                actor_id=PRINCIPAL_ID,
+                payload={"content": f"Remember: {statement}"},
+            )
+        )
+    return await service.remember(
+        session_id=session_id,
+        run_id=None,
+        statement=statement,
+        subject="bee sting allergy",
+        scope="general",
+        belief_type=BeliefType.FACT,
+        portability=None,
+        sensitivity=Sensitivity.INTERNAL,
+        source_event_ids=[event.sequence],
+    )
+
+
+async def test_the_same_fact_learned_in_two_topics_is_promoted_to_core() -> None:
+    _clock, factory, service, _retriever = await formation_stack()
+    await _register(factory, "garden", sealed=False)
+    await _register(factory, "household", sealed=False)
+    first = await _learn(factory, service, await _topic_session(factory, "garden", 7101))
+    assert first.topic_id == "garden"
+    second = await _learn(factory, service, await _topic_session(factory, "household", 7102))
+    assert second.id == first.id
+    assert second.topic_id is None
+    async with factory() as uow:
+        live = await uow.memories.list_memories(principal())
+    assert [record.id for record in live] == [first.id]
+
+
+@pytest.mark.parametrize("sealed_side", ["first", "second"])
+async def test_a_sealed_topic_never_promotes_or_is_promoted(sealed_side: str) -> None:
+    _clock, factory, service, _retriever = await formation_stack()
+    await _register(factory, "health", sealed=True)
+    await _register(factory, "garden", sealed=False)
+    order = ["health", "garden"] if sealed_side == "first" else ["garden", "health"]
+    first = await _learn(factory, service, await _topic_session(factory, order[0], 7201))
+    second = await _learn(factory, service, await _topic_session(factory, order[1], 7202))
+    assert second.id != first.id
+    assert {first.topic_id, second.topic_id} == {"health", "garden"}
+
+
+async def test_an_unregistered_topic_never_promotes() -> None:
+    _clock, factory, service, _retriever = await formation_stack()
+    await _register(factory, "garden", sealed=False)
+    first = await _learn(factory, service, await _topic_session(factory, "garden", 7301))
+    second = await _learn(factory, service, await _topic_session(factory, "mystery", 7302))
+    assert second.id != first.id and second.topic_id == "mystery"

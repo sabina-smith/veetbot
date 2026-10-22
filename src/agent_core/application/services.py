@@ -70,6 +70,7 @@ from agent_core.domain.schedules import (
     ScheduleState,
 )
 from agent_core.domain.surfaces import IssuedPairingCode, Pairing
+from agent_core.domain.topics import TopicCreateRequest, TopicUpdateRequest, TopicView
 from agent_core.domain.views import (
     ApprovalFilters,
     ApprovalView,
@@ -921,3 +922,15 @@ class CallingService(Protocol):
 
 class CallIngressService(Protocol):
     async def receive(self, body: bytes, signature: str, secret: str) -> bool: ...
+
+
+class TopicService(Protocol):
+    """Topics (topics/ARCHITECTURE.md)."""
+
+    async def list(self, principal: Principal) -> builtins.list[TopicView]: ...
+
+    async def create(self, principal: Principal, request: TopicCreateRequest) -> TopicView: ...
+
+    async def update(
+        self, principal: Principal, topic_id: str, request: TopicUpdateRequest
+    ) -> TopicView: ...

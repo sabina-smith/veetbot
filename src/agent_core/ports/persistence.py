@@ -61,6 +61,7 @@ from agent_core.ports.semantic_memory import SemanticMemoryIndex
 from agent_core.ports.semantic_work import SemanticWorkStore
 from agent_core.ports.skills import SkillRepository
 from agent_core.ports.surfaces import SurfaceRepositories
+from agent_core.ports.topics import TopicStore
 
 
 class RepositoryUnitOfWork(Protocol):
@@ -97,6 +98,7 @@ class RepositoryUnitOfWork(Protocol):
     personas: PersonaStore
     model_settings: ModelSettingsStore
     folders: FolderStore
+    topics: TopicStore
     email: EmailStore
     calls: CallStore
     people: PeopleStore

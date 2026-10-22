@@ -25,6 +25,7 @@ from sqlalchemy import (
     or_,
     select,
     text,
+    true,
     update,
 )
 from sqlalchemy import cast as sql_cast
@@ -867,6 +868,7 @@ class PostgresMemoryStore:
         belief_type: BeliefType,
         *,
         topic_id: str | None = None,
+        all_topics: bool = False,
     ) -> list[MemoryRecord]:
         rows = list(
             (
@@ -875,7 +877,7 @@ class PostgresMemoryStore:
                         MemoryRow.tenant_id == tenant_id,
                         MemoryRow.principal_id == principal_id,
                         ~MemoryRow.erasure_pending,
-                        _topic_wall(topic_id),
+                        true() if all_topics else _topic_wall(topic_id),
                         func.lower(MemoryRow.subject) == subject.casefold(),
                         MemoryRow.belief_type == belief_type.value,
                         MemoryRow.status.in_(_LIVE),

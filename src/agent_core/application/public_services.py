@@ -459,6 +459,9 @@ class PublicSessionService:
             raise SessionMetadataValidationError("session metadata exceeds 8 KiB")
         now = self._clock.now()
         async with self._uow_factory() as uow:
+            if topic_id is not None:
+                # A session's topic must be one the owner created (NotFoundError).
+                await uow.topics.get(principal, topic_id)
             agent = await self._resolve_agent(uow, agent_id, principal)
             if browser_profile_id is not None:
                 profile = await uow.browser_profiles.get(browser_profile_id, principal)
