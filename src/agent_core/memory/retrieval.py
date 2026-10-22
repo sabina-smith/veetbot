@@ -70,6 +70,8 @@ from agent_core.ports.determinism import Clock, IdFactory
 from agent_core.ports.persistence import RepositoryUnitOfWork, UnitOfWorkFactory
 from agent_core.ports.semantic_memory import RuntimeSemanticQueries, SemanticQueryLookup
 
+# A belief learned in another topic ranks below this topic's and core's.
+OTHER_TOPIC_SCOPE_WEIGHT = 0.85
 RETRIEVAL_POLICY_VERSION = "retrieval@4"
 RELEVANCE_RETRIEVAL_POLICY_VERSION = "retrieval@5"
 OWNED_RESOURCE_POLICY_VERSION = "owned-resources@1"
@@ -536,8 +538,8 @@ class HybridMemoryRetriever:
             )
         )
         effective_query = self._effective_query(effective_query, moment)
-        # Topic wall (topics/ARCHITECTURE.md): the reading session's topic always
-        # replaces whatever topic the caller put on the query.
+        # Topics (topics/ARCHITECTURE.md): the reading session's topic, never the
+        # caller's, decides which beliefs rank first.
         effective_query = effective_query.model_copy(
             update={"topic_id": await session_topic(uow, session_id, self._principal)}
         )
@@ -1559,6 +1561,9 @@ def _score(
             Portability.CONTEXTUAL: 0.55,
             Portability.LOCAL: 0.15,
         }[record.portability]
+    if query.topic_id is not None and record.topic_id not in (None, query.topic_id):
+        # Another topic's belief is visible everywhere but yields to this topic's.
+        scope *= OTHER_TOPIC_SCOPE_WEIGHT
     stale = record.status in _STALE_STATUSES or (
         now is not None and record.expires_at is not None and record.expires_at <= now
     )

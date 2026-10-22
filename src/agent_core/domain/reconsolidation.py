@@ -303,9 +303,6 @@ class GroupingSource(Protocol):
 
 
 def compatible(left: GroupingSource, right: GroupingSource) -> bool:
-    # Topic wall: beliefs from different topics (or a topic and core) never merge.
-    if getattr(left, "topic_id", None) != getattr(right, "topic_id", None):
-        return False
     return left.scope == right.scope and (
         left.scope != "user" or left.portability is right.portability is Portability.PORTABLE
     )

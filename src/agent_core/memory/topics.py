@@ -9,14 +9,22 @@ from agent_core.domain.agents import Principal
 from agent_core.domain.errors import NotFoundError
 from agent_core.domain.events import EventEnvelope
 from agent_core.ports.persistence import RepositoryUnitOfWork
+from agent_core.ports.repositories import SessionRepository
 
 
 async def session_topic(
     uow: RepositoryUnitOfWork, session_id: UUID, principal: Principal
 ) -> str | None:
-    """The session's topic; a missing session (evaluations, synthetic reads) is core."""
+    """The session's topic; a missing session (evaluations, synthetic reads) is core.
+
+    Some recall paths run on a read-only store bundle without sessions; the topic
+    only orders results, so those recall without one.
+    """
+    sessions: SessionRepository | None = getattr(uow, "sessions", None)
+    if sessions is None:
+        return None
     try:
-        return (await uow.sessions.get(session_id, principal)).topic_id
+        return (await sessions.get(session_id, principal)).topic_id
     except NotFoundError:
         return None
 

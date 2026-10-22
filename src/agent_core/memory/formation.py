@@ -75,7 +75,6 @@ from agent_core.memory.profiles import (
     PersonaNominationProfile,
     UsageDeltas,
 )
-from agent_core.memory.topics import session_topic
 from agent_core.ports.determinism import Clock, IdFactory
 from agent_core.ports.memory import MemoryCandidateExtractor
 from agent_core.ports.persistence import RepositoryUnitOfWork, UnitOfWorkFactory
@@ -2569,7 +2568,6 @@ class GovernedMemoryService:
                 self._principal.principal_id,
                 clean_subject,
                 belief_type,
-                topic_id=topic_id,
             )
             classified = [
                 (
@@ -2838,20 +2836,6 @@ class GovernedMemoryService:
                             )
                         )
                     return stored, "superseded"
-            # Seen independently in two unsealed topics: the belief is about the
-            # owner, not one topic, so the existing one moves to core.
-            cross_topic = await self._promote_across_topics(
-                uow, topic_id, clean_subject, belief_type, clean_statement
-            )
-            if cross_topic is not None:
-                await self._append_event(uow, session_id, run_id, "memory.promoted", cross_topic)
-                if record_audit:
-                    await uow.memories.record_consolidation(
-                        formation_run.model_copy(
-                            update={"reinforced": 1, "finished_at": self._clock.now()}
-                        )
-                    )
-                return cross_topic, "reinforced"
             record = await self._new_record(
                 uow,
                 formation_run.id,
@@ -2890,56 +2874,6 @@ class GovernedMemoryService:
         async with self._uow_factory() as uow, uow.people.lock(self._principal):
             return await apply(uow)
 
-    async def _topic_sealed(self, uow: RepositoryUnitOfWork, topic_id: str) -> bool:
-        """Sealed, or unregistered: either way the topic shares nothing outside itself."""
-        try:
-            return (await uow.topics.get(self._principal, topic_id)).sealed
-        except NotFoundError:
-            return True
-
-    async def _promote_across_topics(
-        self,
-        uow: RepositoryUnitOfWork,
-        topic_id: str | None,
-        subject: str,
-        belief_type: BeliefType,
-        statement: str,
-    ) -> MemoryRecord | None:
-        if topic_id is None or await self._topic_sealed(uow, topic_id):
-            return None
-        key = " ".join(statement.split()).casefold()
-        for other in await uow.memories.related(
-            self._principal.tenant_id,
-            self._principal.principal_id,
-            subject,
-            belief_type,
-            all_topics=True,
-        ):
-            other_topic = other.topic_id
-            if (
-                other_topic is None
-                or other_topic == topic_id
-                or " ".join(other.statement.split()).casefold() != key
-                or await self._topic_sealed(uow, other_topic)
-            ):
-                continue
-            now = self._clock.now()
-            return await uow.memories.reinforce(
-                other.model_copy(
-                    update={
-                        "topic_id": None,
-                        "corroboration_count": other.corroboration_count + 1,
-                        "confidence": min(1.0, other.confidence + 0.1),
-                        "last_evidence_at": max(other.last_evidence_at, now),
-                        "last_reinforced_at": now,
-                        "store_position": await uow.memories.next_position(),
-                        "updated_at": now,
-                    },
-                    deep=True,
-                )
-            )
-        return None
-
     async def _retraction_targets(
         self,
         uow: RepositoryUnitOfWork,
@@ -2957,16 +2891,8 @@ class GovernedMemoryService:
         deny the claim are never targets.
         """
 
-        live = await uow.memories.list_memories(
-            self._principal,
-            limit=500,
-            topic_wall=True,
-            topic_id=(
-                None
-                if session_id is None
-                else await session_topic(uow, session_id, self._principal)
-            ),
-        )
+        del session_id  # topics share every belief (topics/ARCHITECTURE.md)
+        live = await uow.memories.list_memories(self._principal, limit=500)
         subject_key = " ".join(candidate.subject.split()).casefold()
         # Matched on lemmas and on the verb: "no longer runs outdoors" ends
         # "is running outdoors every day" and "goes running outdoors most

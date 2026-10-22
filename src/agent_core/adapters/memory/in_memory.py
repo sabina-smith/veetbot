@@ -317,8 +317,6 @@ class InMemoryMemoryStore:
                     continue
                 if record.tenant_id != query.tenant_id or record.principal_id != query.principal_id:
                     continue
-                if record.topic_id not in (None, query.topic_id):
-                    continue
                 if query.known_at is not None:
                     historical = next(
                         (
@@ -415,9 +413,6 @@ class InMemoryMemoryStore:
         principal_id: str,
         subject: str,
         belief_type: BeliefType,
-        *,
-        topic_id: str | None = None,
-        all_topics: bool = False,
     ) -> list[MemoryRecord]:
         async with self._transaction.owner((tenant_id, principal_id)):
             return [
@@ -426,7 +421,6 @@ class InMemoryMemoryStore:
                 if record.id not in self._erasure_pending
                 and record.tenant_id == tenant_id
                 and record.principal_id == principal_id
-                and (all_topics or record.topic_id in (None, topic_id))
                 and record.subject.casefold() == subject.casefold()
                 and record.belief_type is belief_type
                 and record.status in _LIVE_MEMORY
