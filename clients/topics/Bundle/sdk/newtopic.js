@@ -1,6 +1,5 @@
-// New topic: name it, pick a colour and a helper name, decide whether it's
-// private, then answer two questions. The app creates the topic and hands
-// the answers to its helper, which sketches the first board for real.
+// New topic: name it, pick a colour and a helper name, then a short
+// interview with the helper; the topic opens with a starter board.
 (() => {
   "use strict";
   const call = (op, args = {}) => window.webkit.messageHandlers.topics.postMessage({ op, args });
@@ -15,7 +14,7 @@
   const taken = new Set((window.__existingHelpers || []).map((h) => h.toLowerCase()));
   const s = {
     step: "name", name: "", colour: COLOURS[2][1], helper: HELPERS.find((h) => !taken.has(h.toLowerCase())) || "Wren",
-    sealed: false, qi: 0, answers: [], draft: "", touched: false, error: "",
+    qi: 0, answers: [], draft: "", touched: false, error: "",
   };
   const root = document.getElementById("root");
 
@@ -49,15 +48,6 @@
           el("label", { class: "eyebrow" }, "Its helper is called"),
           helperInput,
           el("p", { class: "t-small muted", style: { marginTop: "6px" } }, "Same helper every time you come back. You can rename it later."))),
-      el("div", { class: "tp-card", style: { marginTop: "40px" } },
-        el("label", { class: "t-row", style: { gap: "16px", alignItems: "flex-start", cursor: "pointer" } },
-          el("input", { type: "checkbox", checked: s.sealed, onchange: (e) => { s.sealed = e.target.checked; render(); }, style: { width: "18px", height: "18px" } }),
-          el("span", {},
-            el("span", { style: { fontSize: "16px", fontWeight: 650 } }, "🔒 Private topic"),
-            el("span", { style: { display: "block", marginTop: "4px", maxWidth: "56ch", fontSize: "14px", color: "var(--ink-2)" } },
-              s.sealed
-                ? `Sealed. Nothing from ${s.name.trim() || "this topic"} shows on Home, in other topics or in notifications. Its time shows only as “Busy”.`
-                : `${s.name.trim() || "This topic"}’s scheduled items show on Home as short labels, like “${s.name.trim() || "Pets"}: vet, Thu”.`)))),
       el("button", { class: "t-button t-primary", type: "submit", style: { marginTop: "40px", height: "48px", padding: "0 24px", fontSize: "15px" } }, `Next: meet ${s.helper.trim() || "your helper"} →`));
     form.addEventListener("submit", (e) => {
       e.preventDefault();
@@ -113,7 +103,7 @@
     s.step = "creating";
     render();
     try {
-      await call("newtopic.create", { name: s.name.trim(), colour: s.colour, helper: s.helper.trim(), sealed: s.sealed, answers: QUESTIONS.map((q, i) => ({ q: q.q(s.name.trim()), a: s.answers[i] || "" })) });
+      await call("newtopic.create", { name: s.name.trim(), colour: s.colour, helper: s.helper.trim(), answers: QUESTIONS.map((q, i) => ({ q: q.q(s.name.trim()), a: s.answers[i] || "" })) });
     } catch (e) {
       s.error = String((e && e.message) || e);
       s.step = "talk";

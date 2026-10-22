@@ -147,7 +147,7 @@ interface ScheduleEntry {
 interface Schedule {
   add(entry: ScheduleEntryInput): Promise<{ id: string }>;
   remove(id: string): Promise<void>;
-  /** This topic's entries in full, other topics' as labels, sealed ones as "Busy". */
+  /** This topic's entries in full, other topics' as labels. */
   list(days?: number): Promise<ScheduleEntry[]>;
 }
 
@@ -192,7 +192,7 @@ interface Agent {
 }
 
 interface Topics {
-  topic: { id: string; name: string; accent: string; agentName: string; sealed: boolean };
+  topic: { id: string; name: string; accent: string; agentName: string };
   module: { id: string; title: string };
   ui: UI;
   draw: Draw;

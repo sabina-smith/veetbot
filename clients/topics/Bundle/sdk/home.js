@@ -1,6 +1,5 @@
-// Home: what needs the owner across topics, and the shared week. Topics
-// appear only by their labels; private topics only as "Busy" and never in
-// "Needs you". Data comes from the app as window.__home.
+// Home: what needs the owner across topics, and the shared week, by label.
+// Data comes from the app as window.__home.
 (() => {
   "use strict";
   const call = (op, args = {}) => window.webkit.messageHandlers.topics.postMessage({ op, args });
@@ -47,7 +46,7 @@
   function render() {
     const asks = data.asks;
     const days = view === "week" ? data.days : data.days.slice(0, 1);
-    const slots = data.slots.filter((s) => !hidden.has(s.topicId ?? "__private") && s.day < days.length);
+    const slots = data.slots.filter((s) => !hidden.has(s.topicId ?? "") && s.day < days.length);
     const now = data.nowHour;
     root.replaceChildren(el("div", { class: "tp-page", style: { paddingBottom: "80px" } },
       el("header", {},
@@ -59,9 +58,7 @@
           asks.length
             ? el("ol", { class: "t-list", style: { marginTop: "8px", paddingLeft: "14px", marginLeft: "-14px" } }, asks.map(needsCard))
             : el("p", { class: "muted", style: { padding: "40px 0" } }, "All clear. Anything new from your helpers lands here."),
-          data.privateNames.length
-            ? el("p", { class: "t-small muted", style: { marginTop: "16px" } }, `🔒 ${data.privateNames.join(", ")} ${data.privateNames.length > 1 ? "are" : "is"} private. Nothing from ${data.privateNames.length > 1 ? "them" : "it"} appears here.`)
-            : null),
+          null),
         el("section", { class: "tp-card", style: { borderTopWidth: "1px" } },
           el("div", { class: "t-row", style: { alignItems: "baseline", gap: "16px" } },
             el("h2", { class: "eyebrow", style: { margin: 0, flex: 1 } }, "Coming up"),
@@ -70,11 +67,11 @@
               style: { fontSize: "13px", fontWeight: view === v ? 650 : 400, textDecoration: view === v ? "underline" : "none", textUnderlineOffset: "5px", color: view === v ? "var(--ink)" : "var(--muted)" },
             }, v === "week" ? "This week" : "Today"))),
           el("div", { class: "t-row", style: { gap: "16px", marginTop: "12px", flexWrap: "wrap" } }, data.topics.map((t) => {
-            const key = t.sealed ? "__private" : t.id;
+            const key = t.id;
             const off = hidden.has(key);
             return el("button", { type: "button", onclick: () => { off ? hidden.delete(key) : hidden.add(key); render(); }, style: { display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "13px", color: off ? "#b3b3ad" : "var(--ink)", textDecoration: off ? "line-through" : "none" } },
-              el("span", { style: { width: "10px", height: "10px", background: t.sealed ? "repeating-linear-gradient(135deg,#0F0F0E 0 1.5px,transparent 1.5px 3.5px)" : off ? "#d6d6d0" : t.tint } }),
-              t.name, t.sealed ? el("span", { class: "faint" }, "(Busy only)") : null);
+              el("span", { style: { width: "10px", height: "10px", background: off ? "#d6d6d0" : t.tint } }),
+              t.name);
           })),
           el("div", { style: { marginTop: "16px", display: "grid", gridTemplateColumns: `40px repeat(${days.length}, minmax(0,1fr))` } },
             el("div"),
@@ -100,12 +97,12 @@
                     borderLeft: `3px solid ${priv ? "#9A9A94" : t.tint}`, outline: !priv && s.kind !== "block" && !sel ? `1px solid ${t.soft}` : "none",
                     color: sel && !priv ? "#fff" : "var(--ink)",
                   },
-                }, el("span", { style: { fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, priv ? "Busy" : s.label),
+                }, el("span", { style: { fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, s.label),
                   !priv && s.len >= 1 ? el("span", { style: { fontSize: "11px", opacity: 0.7 } }, `${s.kind === "task" ? "due " : s.kind === "reminder" ? "reminder " : ""}${fmt(s.start)}`) : null);
               })))),
           el("div", { style: { marginTop: "12px", minHeight: "44px", borderTop: "1px solid var(--line)", paddingTop: "12px", fontSize: "13.5px" } },
             !focus ? el("p", { class: "muted", style: { margin: 0 } }, "Home shows labels only. Tap one to open it in its topic.")
-              : !focus.topicId ? el("p", { style: { margin: 0, color: "var(--ink-2)" } }, `🔒 Busy ${data.days[focus.day].short} ${fmt(focus.start)}. The details stay in a private topic.`)
+              : !focus.topicId ? el("p", { style: { margin: 0, color: "var(--ink-2)" } }, `${focus.label}, ${data.days[focus.day].short} ${fmt(focus.start)}`)
               : el("p", { class: "t-row rise", style: { margin: 0, gap: "12px", flexWrap: "wrap" } },
                   el("b", { style: { color: topicOf(focus.topicId).tint } }, topicOf(focus.topicId).name),
                   el("span", {}, `${focus.label}, ${data.days[focus.day].short} ${fmt(focus.start)}`),

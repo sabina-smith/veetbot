@@ -36,12 +36,19 @@
       items.push(el("button", { class: "tp-need", type: "button", onclick: () => openProposal(p.id) },
         el("b", {}, p.title), el("span", {}, needsSummary(p))));
     }
+    // Suggestions from Veetbot (instructions, schedule and reminder ideas)
+    // will appear here with Accept / Dismiss once the server API lands.
+    for (const g of state.suggestions || []) {
+      items.push(el("span", { class: "tp-need" }, el("b", {}, g.title), g.detail ? el("span", {}, g.detail) : null, " ",
+        el("button", { type: "button", class: "t-textbutton t-helper", onclick: () => call("suggestion.accept", { id: g.id }).catch(report) }, "Accept"), " ",
+        el("button", { type: "button", class: "t-textbutton", onclick: () => call("suggestion.dismiss", { id: g.id }).catch(report) }, "Dismiss")));
+    }
     for (const d of state.dueToday) {
       items.push(el("span", { class: "tp-due" }, el("b", {}, d.label), " ", el("span", {}, "today")));
     }
     masthead.replaceChildren(
       el("p", { class: "eyebrow tp-eyebrow" }, el("span", { class: "tp-swatch" }),
-        `Topic${topic.subtitle ? ` · ${topic.subtitle}` : ""}`, topic.sealed ? " · Private" : ""),
+        `Topic${topic.subtitle ? ` · ${topic.subtitle}` : ""}`),
       el("h1", { class: "display tp-title" }, topic.name),
       items.length ? el("div", { class: "tp-needs" }, el("span", { class: "eyebrow" }, "Needs you"), items) : null,
     );

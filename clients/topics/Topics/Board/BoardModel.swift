@@ -25,7 +25,12 @@ final class BoardModel: ObservableObject {
     private var pendingToast: (id: String, text: String, commit: String?, fromHelper: Bool)?
     private var pendingOpenProposal: Int64?
 
-    var topic: Topic { workspace.topic }
+    /// Follows renames.
+    var topic: Topic { app.topic(workspace.topic.id) ?? workspace.topic }
+    /// Where server suggestions will come from. Veetbot's per-topic
+    /// suggestions API (instructions, schedule and reminder suggestions with
+    /// accept/dismiss) isn't wired yet; the page already has a place for them.
+    var suggestions: [[String: Any]] { [] }
     private weak var page: WKWebView?
     private var cancellables: Set<AnyCancellable> = []
 
@@ -87,6 +92,7 @@ final class BoardModel: ObservableObject {
             "dueToday": dueToday().map { ["label": $0] },
             "thread": agent.thread.map { ["from": $0.fromOwner ? "you" : "helper", "text": $0.text] },
             "recent": NSNull(),
+            "suggestions": suggestions,
         ]
         if let recent = recentChange, Date().timeIntervalSince(recent.date) < 15 * 60 {
             state["recent"] = [
@@ -274,6 +280,9 @@ final class BoardModel: ObservableObject {
         case "toast":
             showToast(args["text"] as? String ?? "")
             return nil
+        case "suggestion.accept", "suggestion.dismiss":
+            // Placeholder until Veetbot's suggestions API lands.
+            throw BridgeError("Suggestions aren't available yet.")
         case "log":
             recordModuleError(args["module"] as? String ?? "board", args["message"] as? String ?? "unknown error")
             return nil

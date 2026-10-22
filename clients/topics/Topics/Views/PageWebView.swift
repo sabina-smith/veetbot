@@ -125,7 +125,7 @@ enum PageHTML {
         let context: [String: Any] = [
             "topic": [
                 "id": topic.id, "name": topic.name, "subtitle": nullable(topic.subtitle), "accent": topic.accentHex,
-                "agentName": topic.agentName, "sealed": topic.sealed, "suggestion": nullable(topic.suggestion),
+                "agentName": topic.agentName, "suggestion": nullable(topic.suggestion),
             ],
             "layout": ["modules": layout],
         ]
