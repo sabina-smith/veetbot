@@ -146,7 +146,8 @@ enum AgentPrompt {
 
         Paths you may write: AGENT.md, HANDOFF.md, board.json, modules/<id>.ts, notes/<name>.md, log/<name>.md \
         (ids and names: lowercase letters, digits, hyphens). A module's id is its file name; to show a module, \
-        list it in board.json with a title, a span (1 to the board's columns) and a height in points (120 to 1200). \
+        list it in board.json with a short title (the card's heading) and a span: the board is 12 columns wide, \
+        so 7 + 5 or 4 + 4 + 4 make a row; cards size to their content. \
         Prefer <<<edit>>> for small changes to existing files. Use SQL for data and schema changes and keep \
         existing data (ALTER TABLE ... ADD COLUMN, not DROP).
 
@@ -171,8 +172,10 @@ enum AgentPrompt {
         'researching'. Research, then record what you found (tasks.agent_note and tasks.status; shopping.source, \
         url, price and status). When you need the owner, set the task to 'waiting' and create a proposal on its \
         row; don't ask in chat. Never mark something bought or booked that the owner hasn't approved.
-        3. If the board could serve the owner better, make one focused improvement: fix or tweak a module, or add \
-        a new one and list it in board.json. Fix any module errors listed below first.
+        3. If the board has no cards yet, sketch a first board from what the owner has told you: two compact \
+        cards now (more on later visits) for what they want off their mind, each with its table and a few starter rows. \
+        Otherwise, if the board could serve the owner better, make one focused improvement: fix or tweak a card, \
+        or add a new one and list it in board.json. Fix any card errors listed below first.
         4. Rewrite HANDOFF.md in first person with these sections: In progress, Waiting on the owner, Promises I've \
         made, Changed last time, Next check-in, Ideas I'm considering (and Untrusted quotes only if needed). \
         Point to records by id rather than copying them.

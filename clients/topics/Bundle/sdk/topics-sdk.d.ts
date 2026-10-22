@@ -1,22 +1,33 @@
 // Topics module SDK. Ambient types: modules use them without importing.
 //
-// A module is one file, modules/<id>.ts, that default-exports a render
-// function. The runtime calls it with an empty element and the SDK, and
-// calls it again whenever any module or the agent changes the topic's
-// data. Render fresh from the database each time; keep no other state.
+// A module is one card on the board: modules/<id>.ts default-exports a
+// render function. The board draws the card's frame (a heavy rule and the
+// title from board.json); the module fills the body. It is called again
+// whenever the topic's data changes, so render fresh from the database and
+// keep only small view state (a selection) in module-level variables.
 //
 //   export default async function render(root: HTMLElement, t: Topics): Promise<void> {
 //     const rows = await t.db.query<{ id: number; title: string }>("SELECT id, title FROM tasks");
-//     root.append(t.ui.list(rows, (r) => t.ui.text(r.title)));
+//     t.card.meta(`${rows.length} left`);
+//     root.append(...rows.map((r) => t.ui.item([t.ui.text(r.title)])));
 //   }
+//
+// Look and feel: editorial, flat, square, ink on white with the topic's
+// colour for the helper. Rows are `ui.item`s separated by hairlines; small
+// uppercase labels are `ui.eyebrow`; actions are `ui.textButton`s, never
+// big buttons, except `ui.needsButton` (orange) which is reserved for a
+// decision waiting on the owner. Mark a row the helper is working on with
+// `ui.item(..., { looking: true })` plus `ui.helperNote("Fern is looking")`,
+// and a row with an open proposal with `{ needs: true }` plus a needsButton
+// that calls `t.proposals.open(id)`.
 //
 // Rules: erasable TypeScript only (types, interfaces, `as`; no enums,
 // namespaces, parameter properties or decorators); no imports at run time;
-// no network (the card's content policy blocks it). Use the building blocks
+// no network (the page's content policy blocks it). Use the building blocks
 // so every board looks like one app.
 
 type Child = Node | string | number | null | undefined | false | Child[];
-type Tone = "neutral" | "accent" | "good" | "warn" | "bad";
+type Tone = "neutral" | "accent" | "good" | "warn" | "attention" | "bad" | "ink";
 type SQLValue = string | number | null;
 
 interface FormField {
@@ -45,7 +56,20 @@ interface UI {
   row(children: Child[], opts?: { gap?: number; align?: string; justify?: string; wrap?: boolean }): HTMLElement;
   spacer(): HTMLElement;
   heading(text: string, opts?: { level?: 1 | 2 }): HTMLElement;
-  text(text: string, opts?: { muted?: boolean; small?: boolean; strong?: boolean }): HTMLElement;
+  /** Small uppercase label. */
+  eyebrow(text: string, opts?: { tone?: Tone }): HTMLElement;
+  /** `clamp` limits it to two lines. */
+  text(text: string, opts?: { muted?: boolean; small?: boolean; strong?: boolean; tone?: Tone; clamp?: boolean }): HTMLElement;
+  /** A row: hairline below; `needs` adds the orange tab, `looking` a shimmer while the helper works on it. */
+  item(children: Child[], opts?: { needs?: boolean; looking?: boolean; changed?: boolean }): HTMLElement;
+  /** A quiet underlined action. `helper: true` colours it as the helper's ("Fern, find it"). */
+  textButton(label: string, onClick: (e: Event) => unknown, opts?: { helper?: boolean; title?: string }): HTMLElement;
+  /** The orange "your call" button for an open proposal, e.g. "2 options from $24". */
+  needsButton(label: string, onClick: (e: Event) => unknown): HTMLElement;
+  /** A pulsing line in the helper's colour, e.g. "Fern is looking". */
+  helperNote(text: string): HTMLElement;
+  /** An underlined input that adds on Enter, e.g. "Add something to buy". */
+  inlineAdd(placeholder: string, onSubmit: (value: string) => unknown, opts?: { button?: string }): HTMLElement;
   badge(text: string, tone?: Tone): HTMLElement;
   /** The button disables itself while an async onClick runs. */
   button(label: string, onClick: (e: Event) => unknown, opts?: { kind?: "primary" | "secondary" | "ghost"; small?: boolean; title?: string; disabled?: boolean }): HTMLElement;
@@ -59,7 +83,7 @@ interface UI {
   empty(text: string): HTMLElement;
   stat(label: string, value: string | number): HTMLElement;
   /** 0 to 1. */
-  progress(value: number): HTMLElement;
+  progress(value: number, opts?: { color?: string }): HTMLElement;
   split(left: Child, right: Child, opts?: { columns?: string }): HTMLElement;
   /** The agent's mark on the board: a small chip, e.g. on a row it has worked on. `attention` fills it, for "needs you". */
   agentChip(text: string, onClick?: (e: Event) => unknown, opts?: { attention?: boolean; title?: string }): HTMLElement;
@@ -168,7 +192,7 @@ interface Agent {
 }
 
 interface Topics {
-  topic: { id: string; name: string; accent: string; agentName: string };
+  topic: { id: string; name: string; accent: string; agentName: string; sealed: boolean };
   module: { id: string; title: string };
   ui: UI;
   draw: Draw;
@@ -176,7 +200,16 @@ interface Topics {
   schedule: Schedule;
   agent: Agent;
   proposals: Proposals;
-  toast(text: string): void;
+  /** A short message at the bottom of the board, optionally with Undo. */
+  toast(text: string, opts?: { undo?: () => unknown }): void;
+  /** The "Needs your OK" dialog for anything with real-world effects. Resolves true if the owner confirms. */
+  confirm(opts: { title: string; rows?: [string, string][]; explainer?: string; confirm?: string }): Promise<boolean>;
+  /** Opens a web page in the owner's browser. */
+  openLink(url: string): Promise<void>;
+  /** The card's frame. */
+  card: { meta(text: string): void };
+  /** "$24", "$31.50". */
+  money(n: number | null | undefined): string;
   /** Re-renders this module, e.g. after changing module-local selection state. */
   refresh(): void;
   /** YYYY-MM-DD, local. */

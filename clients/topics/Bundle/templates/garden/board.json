@@ -1,9 +1,9 @@
 {
-  "columns": 3,
+  "columns": 12,
   "modules": [
-    { "id": "garden-map", "title": "Garden map", "span": 2, "height": 400 },
-    { "id": "todo", "title": "To-do", "span": 1, "height": 400 },
-    { "id": "tool-shed", "title": "Tool shed", "span": 1, "height": 360 },
-    { "id": "shopping", "title": "Shopping list", "span": 2, "height": 360 }
+    { "id": "garden-map", "title": "Map", "span": 7 },
+    { "id": "shopping", "title": "Shopping", "span": 5 },
+    { "id": "todo", "title": "To do", "span": 4 },
+    { "id": "tool-shed", "title": "Tool shed", "span": 4 }
   ]
 }

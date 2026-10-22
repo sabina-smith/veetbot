@@ -10,7 +10,10 @@ import WebKit
 enum DebugSnapshots {
     static func startIfRequested(app: AppModel) {
         let defaults = UserDefaults.standard
-        if defaults.bool(forKey: "autoCheckIn"), let id = app.selection {
+        if let screen = defaults.string(forKey: "screen") {
+            app.screen = screen == "home" ? .home : screen == "new" ? .newTopic : .topic(screen)
+        }
+        if defaults.bool(forKey: "autoCheckIn"), case .topic(let id) = app.screen {
             Task {
                 try? await Task.sleep(for: .seconds(3))
                 app.agents[id]?.checkIn()
@@ -38,6 +41,8 @@ enum DebugSnapshots {
         let image = NSImage(size: content.bounds.size)
         image.addRepresentation(rep)
         for webView in webViews(in: content) where !webView.isHiddenOrHasHiddenAncestor {
+            // Animations don't advance while the window is hidden behind others.
+            _ = try? await webView.evaluateJavaScript("document.getElementById('tp-debug-still') || document.head.append(Object.assign(document.createElement('style'), { id: 'tp-debug-still', textContent: '*, *::before, *::after { animation: none !important; }' }))")
             guard let shot = try? await webView.takeSnapshot(configuration: nil) else { continue }
             var frame = webView.convert(webView.bounds, to: content)
             if content.isFlipped { frame.origin.y = content.bounds.height - frame.maxY }

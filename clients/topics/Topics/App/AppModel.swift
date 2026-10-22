@@ -3,22 +3,25 @@ import SwiftUI
 import TopicsKit
 
 /// Owns everything the app holds open: the topics, their workspaces,
-/// boards and agents, the shared schedule, and the Veetbot connection.
+/// boards and helpers, the shared schedule, and the Veetbot connection.
 @MainActor
 final class AppModel: ObservableObject {
-    /// One example topic for now; more topics follow the same shape.
-    let topics: [Topic] = [.garden]
+    enum Screen: Hashable {
+        case home
+        case topic(String)
+        case newTopic
+    }
 
     let connection = VeetbotConnection()
     let schedule: SharedSchedule
+    let topicStore: TopicStore
+    @Published private(set) var topics: [Topic] = []
     @Published private(set) var boards: [String: BoardModel] = [:]
     @Published private(set) var agents: [String: TopicAgent] = [:]
-    @Published var selection: String? = Topic.garden.id
+    @Published var screen: Screen = .topic(Topic.garden.id)
     @Published var startupError: String?
-    @Published var toast: String?
-    @Published var sidebarTab: SidebarTab = .forYou
 
-    enum SidebarTab: Hashable { case forYou, chat }
+    private var builder: ModuleBuilder?
 
     nonisolated static var dataRoot: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -31,27 +34,146 @@ final class AppModel: ObservableObject {
 
     init() {
         schedule = SharedSchedule(fileURL: Self.dataRoot.appendingPathComponent("shared/schedule.json"))
+        topicStore = TopicStore(fileURL: Self.dataRoot.appendingPathComponent("topics.json"))
+        topics = topicStore.topics
         do {
-            let builder = try ModuleBuilder()
-            for topic in topics {
-                let template = Self.bundledResources?.appendingPathComponent("templates/\(topic.id)")
-                let workspace = try TopicWorkspace(
-                    topic: topic, base: Self.dataRoot.appendingPathComponent("workspaces"), template: template
-                )
-                let board = BoardModel(workspace: workspace, builder: builder, app: self)
-                boards[topic.id] = board
-                agents[topic.id] = TopicAgent(topic: topic, board: board, app: self)
-            }
+            builder = try ModuleBuilder()
+            for topic in topics { try open(topic) }
+            seedScheduleIfEmpty()
         } catch {
             startupError = error.localizedDescription
         }
     }
 
-    func showToast(_ text: String) {
-        toast = text
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(3))
-            if toast == text { toast = nil }
+    private func open(_ topic: Topic) throws {
+        guard let builder else { return }
+        let template = Self.bundledResources?.appendingPathComponent("templates/\(topic.template ?? "blank")")
+        let workspace = try TopicWorkspace(
+            topic: topic, base: Self.dataRoot.appendingPathComponent("workspaces"), template: template,
+            substitutions: ["name": topic.name, "helper": topic.agentName]
+        )
+        let board = BoardModel(workspace: workspace, builder: builder, app: self)
+        boards[topic.id] = board
+        agents[topic.id] = TopicAgent(topic: topic, board: board, app: self)
+    }
+
+    func topic(_ id: String) -> Topic? { topics.first { $0.id == id } }
+
+    // MARK: New topic
+
+    func createTopic(name: String, colour: String, helper: String, sealed: Bool, answers: [(q: String, a: String)]) throws {
+        let topic = try topicStore.add(name: name, accentHex: colour, agentName: helper, sealed: sealed)
+        topics = topicStore.topics
+        try open(topic)
+        screen = .topic(topic.id)
+        let told = answers.map { "\($0.q)\n\($0.a)" }.joined(separator: "\n\n")
+        agents[topic.id]?.checkIn(
+            reason: "You set up \(topic.name)",
+            focus: "The owner just created this topic and answered your first questions:\n\n\(told)\n\nSketch the first board now."
+        )
+    }
+
+    // MARK: Home
+
+    func homeData() -> [String: Any] {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let dayFormatter = DateFormatter()
+        dayFormatter.dateFormat = "EEE"
+        let days: [[String: Any]] = (0..<5).map { offset in
+            let date = calendar.date(byAdding: .day, value: offset, to: today)!
+            return ["short": dayFormatter.string(from: date), "date": calendar.component(.day, from: date), "today": offset == 0]
+        }
+        let entries = schedule.entries(for: .home, topics: topics, from: today, to: today.addingTimeInterval(5 * 86_400))
+        let slots: [[String: Any]] = entries.map { entry in
+            let day = calendar.dateComponents([.day], from: today, to: calendar.startOfDay(for: entry.start)).day ?? 0
+            let parts = calendar.dateComponents([.hour, .minute], from: entry.start)
+            var start = Double(parts.hour ?? 9) + Double(parts.minute ?? 0) / 60
+            if start == 0 { start = 9 }
+            let length = entry.end.map { max(0.5, $0.timeIntervalSince(entry.start) / 3600) } ?? 1
+            return [
+                "id": entry.id.uuidString, "topicId": PageHTML.nullable(entry.topicID),
+                "label": entry.topicID == nil ? "Busy" : Self.shortLabel(entry.label),
+                "day": day, "start": start, "len": length, "kind": entry.kind.rawValue,
+            ]
+        }
+        let asks: [[String: Any]] = topics.filter { !$0.sealed }.flatMap { topic in
+            (boards[topic.id]?.proposals ?? []).map { proposal -> [String: Any] in
+                ["topicId": topic.id, "name": topic.name, "tint": topic.accentHex, "helper": topic.agentName, "proposal": BoardModel.json(proposal)]
+            }
+        }
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "EEEE d MMMM"
+        let now = calendar.dateComponents([.hour, .minute], from: Date())
+        return [
+            "date": dateFormatter.string(from: Date()),
+            "asks": asks,
+            "topics": topics.map { topic -> [String: Any] in
+                ["id": topic.id, "name": topic.name, "tint": topic.accentHex, "soft": PageHTML.mix(topic.accentHex, with: (255, 255, 255), 0.88), "sealed": topic.sealed]
+            },
+            "privateNames": topics.filter(\.sealed).map(\.name),
+            "days": days,
+            "slots": slots,
+            "nowHour": Double(now.hour ?? 12) + Double(now.minute ?? 0) / 60,
+        ]
+    }
+
+    /// Home shows "Garden: Plant garlic" as "Plant garlic" in the Garden colour.
+    private static func shortLabel(_ label: String) -> String {
+        guard let colon = label.firstIndex(of: ":") else { return label }
+        return label[label.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+    }
+
+    /// Calls from the Home and New topic pages.
+    func handleHome(op: String, args: [String: Any]) async throws -> Any? {
+        let topicID = args["topicId"] as? String ?? ""
+        let proposalID = (args["id"] as? NSNumber)?.int64Value
+        switch op {
+        case "home.accept":
+            if let proposalID { boards[topicID]?.accept(id: proposalID, option: (args["option"] as? NSNumber)?.intValue, note: nil) }
+            objectWillChange.send()
+        case "home.compare":
+            screen = .topic(topicID)
+            if let proposalID { boards[topicID]?.openProposalWhenShown(proposalID) }
+        case "home.openTopic":
+            screen = .topic(topicID)
+        case "newtopic.create":
+            let answers = (args["answers"] as? [[String: Any]] ?? []).map { (q: $0["q"] as? String ?? "", a: $0["a"] as? String ?? "") }
+            try createTopic(
+                name: args["name"] as? String ?? "New topic", colour: args["colour"] as? String ?? "#0E7C86",
+                helper: args["helper"] as? String ?? "Wren", sealed: args["sealed"] as? Bool ?? false, answers: answers
+            )
+        default:
+            break
+        }
+        return nil
+    }
+
+    /// A few labelled time blocks so Home's week isn't empty on first run.
+    private func seedScheduleIfEmpty() {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let existing = schedule.entries(for: .home, topics: topics, from: today.addingTimeInterval(-30 * 86_400), to: today.addingTimeInterval(60 * 86_400))
+        guard existing.count < 3 else { return }
+        func at(_ day: Int, _ hour: Double) -> Date { today.addingTimeInterval(Double(day) * 86_400 + hour * 3600) }
+        let samples: [(String, ScheduleKind, Int, Double, Double, String)] = [
+            ("work", .block, 0, 9, 2, "Board prep"),
+            ("garden", .task, 0, 17, 1, "Turn the compost pile"),
+            ("health", .block, 1, 8, 1.5, "Appointment"),
+            ("work", .block, 1, 13, 2, "Portfolio review"),
+            ("household", .reminder, 1, 19, 1, "Recycling out"),
+            ("work", .task, 2, 12, 1, "Send Q3 memo"),
+            ("household", .block, 2, 14, 2, "Plumber window"),
+            ("garden", .block, 3, 10, 2, "Plant garlic"),
+            ("household", .block, 3, 13, 1.5, "Farmers market"),
+            ("health", .block, 4, 16, 1, "Appointment"),
+        ]
+        for (id, kind, day, hour, length, label) in samples {
+            guard let owner = topic(id) else { continue }
+            _ = try? schedule.add(
+                ScheduleRecord(topicID: owner.id, kind: kind, start: at(day, hour), end: at(day, hour + length), sharedLabel: label),
+                owner: owner
+            )
         }
     }
 }

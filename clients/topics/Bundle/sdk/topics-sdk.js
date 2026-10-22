@@ -1,13 +1,13 @@
-// The Topics module runtime. Loaded into every module card before the
-// module's own code. It provides the building blocks (`ui`), graphics
-// (`draw`) and the primitives that cross into the app through the
-// `topics` message handler (`db`, `schedule`, `agent`). Types for module
-// authors are in topics-sdk.d.ts.
+// The Topics module runtime: building blocks (`ui`), graphics (`draw`), and
+// the primitives that cross into the app through the `topics` message
+// handler (`db`, `schedule`, `proposals`, `agent`). Every card on a board
+// is one module; the board page (board.js) lays the cards out and calls
+// each module's render function. Types for module authors are in
+// topics-sdk.d.ts.
 (() => {
   "use strict";
 
-  const call = (op, args = {}) =>
-    window.webkit.messageHandlers.topics.postMessage({ op, args });
+  const call = (op, args = {}) => window.webkit.messageHandlers.topics.postMessage({ op, args });
 
   // ---------- elements ----------
 
@@ -25,13 +25,28 @@
       if (value === undefined || value === null || value === false) continue;
       if (key === "class") node.className = value;
       else if (key === "style" && typeof value === "object") Object.assign(node.style, value);
-      else if (key.startsWith("on") && typeof value === "function")
-        node.addEventListener(key.slice(2).toLowerCase(), value);
+      else if (key.startsWith("on") && typeof value === "function") node.addEventListener(key.slice(2).toLowerCase(), value);
       else if (key in node && typeof value !== "string") node[key] = value;
       else node.setAttribute(key, value === true ? "" : String(value));
     }
     append(node, children);
     return node;
+  }
+
+  function guarded(onClick, node) {
+    return async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (node.disabled) return;
+      node.disabled = true;
+      try {
+        await onClick(event);
+      } catch (e) {
+        report(e);
+      } finally {
+        if (node.isConnected) node.disabled = false;
+      }
+    };
   }
 
   // ---------- building blocks ----------
@@ -42,64 +57,42 @@
       return el("div", { class: "t-stack", style: { gap: `${opts.gap ?? 10}px` } }, children);
     },
     row(children, opts = {}) {
-      return el(
-        "div",
-        {
-          class: "t-row",
-          style: {
-            gap: `${opts.gap ?? 8}px`,
-            alignItems: opts.align ?? "center",
-            justifyContent: opts.justify ?? "flex-start",
-            flexWrap: opts.wrap ? "wrap" : "nowrap",
-          },
-        },
-        children,
-      );
+      return el("div", {
+        class: "t-row",
+        style: { gap: `${opts.gap ?? 8}px`, alignItems: opts.align ?? "center", justifyContent: opts.justify ?? "flex-start", flexWrap: opts.wrap ? "wrap" : "nowrap" },
+      }, children);
     },
-    spacer() {
-      return el("div", { class: "t-spacer" });
-    },
-    heading(text, opts = {}) {
-      return el(opts.level === 2 ? "h3" : "h2", { class: "t-heading" }, text);
-    },
+    spacer: () => el("div", { class: "t-spacer" }),
+    heading: (text, opts = {}) => el(opts.level === 2 ? "h3" : "h2", { class: "t-heading" }, text),
+    eyebrow: (text, opts = {}) => el("p", { class: `eyebrow t-text${opts.tone ? ` t-tone-${opts.tone}` : " muted"}` }, text),
     text(text, opts = {}) {
-      const cls = ["t-text", opts.muted && "t-muted", opts.small && "t-small", opts.strong && "t-strong"];
+      const cls = ["t-text", opts.muted && "t-muted", opts.small && "t-small", opts.strong && "t-strong", opts.tone && `t-tone-${opts.tone}`, opts.clamp && "t-clamp"];
       return el("p", { class: cls.filter(Boolean).join(" ") }, text);
     },
-    badge(text, tone = "neutral") {
-      return el("span", { class: `t-badge t-tone-${tone}` }, text);
-    },
+    badge: (text, tone = "neutral") => el("span", { class: `t-badge t-tone-${tone}` }, text),
     button(label, onClick, opts = {}) {
-      const node = el(
-        "button",
-        {
-          class: `t-button t-${opts.kind ?? "secondary"}${opts.small ? " t-small" : ""}`,
-          title: opts.title,
-          disabled: opts.disabled,
-        },
-        label,
-      );
-      node.addEventListener("click", async (event) => {
-        event.preventDefault();
-        if (node.disabled) return;
-        node.disabled = true;
-        try {
-          await onClick(event);
-        } catch (e) {
-          report(e);
-        } finally {
-          if (node.isConnected) node.disabled = false;
-        }
-      });
+      const node = el("button", { class: `t-button t-${opts.kind ?? "secondary"}${opts.small ? " t-small" : ""}`, title: opts.title, disabled: opts.disabled, type: "button" }, label);
+      node.addEventListener("click", guarded(onClick, node));
       return node;
     },
+    textButton(label, onClick, opts = {}) {
+      const node = el("button", { class: `t-textbutton${opts.helper ? " t-helper" : ""}`, title: opts.title, type: "button" }, label);
+      node.addEventListener("click", guarded(onClick, node));
+      return node;
+    },
+    needsButton(label, onClick) {
+      const node = el("button", { class: "t-needs", type: "button" }, label);
+      node.addEventListener("click", guarded(onClick, node));
+      return node;
+    },
+    helperNote: (text) => el("p", { class: "t-helper-note" }, text),
+    item(children, opts = {}) {
+      const cls = ["t-item", opts.needs && "t-needs-tab", opts.looking && "t-looking", opts.changed && "t-changed"];
+      return el("div", { class: cls.filter(Boolean).join(" ") }, children);
+    },
     section(title, children, opts = {}) {
-      return el(
-        "section",
-        { class: "t-section" },
-        ui.row([el("h3", { class: "t-section-title" }, title), ui.spacer(), opts.action]),
-        children,
-      );
+      return el("section", { class: "t-stack", style: { gap: "6px" } },
+        ui.row([el("p", { class: "eyebrow t-text faint" }, title), ui.spacer(), opts.action]), children);
     },
     list(items, render, opts = {}) {
       if (!items.length) return ui.empty(opts.empty ?? "Nothing here yet.");
@@ -107,24 +100,10 @@
     },
     table(columns, rows, opts = {}) {
       if (!rows.length) return ui.empty(opts.empty ?? "Nothing here yet.");
-      return el(
-        "table",
-        { class: "t-table" },
-        el("thead", {}, el("tr", {}, columns.map((c) => el("th", { style: { textAlign: c.align ?? "left" } }, c.label)))),
-        el(
-          "tbody",
-          {},
-          rows.map((row) =>
-            el(
-              "tr",
-              {},
-              columns.map((c) =>
-                el("td", { style: { textAlign: c.align ?? "left" } }, c.render ? c.render(row) : row[c.key] ?? ""),
-              ),
-            ),
-          ),
-        ),
-      );
+      return el("table", { class: "t-table" },
+        el("thead", {}, el("tr", {}, columns.map((c) => el("th", { style: { textAlign: c.align ?? "left", width: c.width } }, c.label)))),
+        el("tbody", {}, rows.map((row) => el("tr", {}, columns.map((c) =>
+          el("td", { style: { textAlign: c.align ?? "left" } }, c.render ? c.render(row) : row[c.key] ?? ""))))));
     },
     form(fields, onSubmit, opts = {}) {
       const inputs = {};
@@ -138,24 +117,13 @@
         } else if (f.type === "textarea") {
           input = el("textarea", { name: f.name, placeholder: f.placeholder ?? "", rows: 2 }, f.value ?? "");
         } else {
-          input = el("input", {
-            name: f.name,
-            type: f.type ?? "text",
-            placeholder: f.placeholder ?? "",
-            required: f.required,
-            value: f.value ?? "",
-            step: f.type === "number" ? "any" : undefined,
-          });
+          input = el("input", { name: f.name, type: f.type ?? "text", placeholder: f.placeholder ?? "", required: f.required, value: f.value ?? "", step: f.type === "number" ? "any" : undefined });
         }
         inputs[f.name] = input;
         return el("label", { class: `t-field${f.wide ? " t-wide" : ""}` }, f.label ? el("span", {}, f.label) : null, input);
       });
-      const form = el(
-        "form",
-        { class: `t-form${opts.inline ? " t-inline" : ""}` },
-        controls,
-        el("button", { class: "t-button t-primary", type: "submit" }, opts.submitLabel ?? "Add"),
-      );
+      const form = el("form", { class: "t-form" }, controls,
+        el("button", { class: "t-button t-primary", type: "submit" }, opts.submitLabel ?? "Add"));
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
         const values = {};
@@ -172,9 +140,25 @@
       });
       return form;
     },
+    inlineAdd(placeholder, onSubmit, opts = {}) {
+      const input = el("input", { placeholder, "aria-label": placeholder });
+      const form = el("form", { class: "t-inline-add" }, input, opts.button ? el("button", { type: "submit" }, opts.button) : null);
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const value = input.value.trim();
+        if (!value) return;
+        try {
+          await onSubmit(value);
+          input.value = "";
+        } catch (e) {
+          report(e);
+        }
+      });
+      return form;
+    },
     checkbox(checked, onChange, label) {
       const input = el("input", { type: "checkbox", checked: !!checked });
-      input.addEventListener("change", () => onChange(input.checked));
+      input.addEventListener("change", () => Promise.resolve(onChange(input.checked)).catch(report));
       return el("label", { class: "t-check" }, input, label ? el("span", {}, label) : null);
     },
     select(options, value, onChange) {
@@ -182,39 +166,22 @@
         const [v, label] = Array.isArray(o) ? o : [o, o];
         return el("option", { value: v, selected: String(v) === String(value) }, label);
       }));
-      node.addEventListener("change", () => onChange(node.value));
+      node.addEventListener("change", () => Promise.resolve(onChange(node.value)).catch(report));
       return node;
     },
-    empty(text) {
-      return el("div", { class: "t-empty" }, text);
-    },
-    stat(label, value) {
-      return el("div", { class: "t-stat" }, el("div", { class: "t-stat-value" }, value), el("div", { class: "t-stat-label" }, label));
-    },
-    progress(value) {
+    empty: (text) => el("div", { class: "t-empty" }, text),
+    stat: (label, value) => el("div", { class: "t-stat" }, el("div", { class: "t-stat-value tabular" }, value), el("div", { class: "t-stat-label" }, label)),
+    progress(value, opts = {}) {
       const pct = Math.max(0, Math.min(1, value)) * 100;
-      return el("div", { class: "t-progress" }, el("div", { style: { width: `${pct}%` } }));
+      return el("div", { class: "t-progress" }, el("div", { style: { width: `${pct}%`, background: opts.color } }));
     },
+    split: (left, right, opts = {}) => el("div", { class: "t-split", style: { gridTemplateColumns: opts.columns ?? "3fr 2fr" } }, left, right),
     agentChip(text, onClick, opts = {}) {
-      const node = el(
-        "button",
-        { class: `t-agent-chip${opts.attention ? " t-attention" : ""}`, title: opts.title },
-        el("span", { class: "t-agent-spark" }, "\u2726"),
-        el("span", {}, text),
-      );
-      node.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        Promise.resolve(onClick && onClick(event)).catch(report);
-      });
+      const node = el("button", { class: `t-agent-chip${opts.attention ? " t-attention" : ""}`, title: opts.title, type: "button" }, text);
+      if (onClick) node.addEventListener("click", guarded(onClick, node));
       return node;
     },
-    link(text, url) {
-      return el("a", { href: url, class: "t-link", title: url }, text);
-    },
-    split(left, right, opts = {}) {
-      return el("div", { class: "t-split", style: { gridTemplateColumns: opts.columns ?? "3fr 2fr" } }, left, right);
-    },
+    link: (text, url) => el("a", { href: url, class: "t-link", title: url }, text),
   };
 
   // ---------- graphics ----------
@@ -230,9 +197,8 @@
         const t = document.createElementNS(SVG_NS, "title");
         t.textContent = value;
         node.append(t);
-      } else if (typeof value === "string" && value.startsWith("var(")) {
-        node.style.setProperty(key, value);
-      } else node.setAttribute(key, String(value));
+      } else if (typeof value === "string" && value.startsWith("var(")) node.style.setProperty(key, value);
+      else node.setAttribute(key, String(value));
     }
     append(node, children);
     return node;
@@ -240,66 +206,23 @@
 
   const draw = {
     colors: {
-      accent: "var(--accent)",
-      text: "var(--fg)",
-      muted: "var(--muted)",
-      line: "var(--border)",
-      surface: "var(--surface)",
-      soil: "#8a6a4f",
-      leaf: "#4f9a58",
-      water: "#4a8fd1",
-      sun: "#e3b23c",
-      bloom: "#d1608a",
+      accent: "var(--topic)", text: "var(--ink)", muted: "var(--muted)", line: "var(--line)", surface: "var(--surface)",
+      soil: "#8a6a4f", leaf: "#4f9a58", water: "#4a8fd1", sun: "#e3b23c", bloom: "#d1608a",
     },
-    svg(width, height, children, opts = {}) {
-      return svgNode(
-        "svg",
-        { viewBox: opts.viewBox ?? `0 0 ${width} ${height}`, class: "t-svg", preserveAspectRatio: "xMidYMid meet" },
-        children,
-      );
-    },
-    group(children, opts = {}) {
-      return svgNode("g", { transform: opts.transform, opacity: opts.opacity }, children);
-    },
-    rect(o) {
-      return svgNode("rect", {
-        x: o.x, y: o.y, width: o.w, height: o.h, rx: o.r ?? 0,
-        fill: o.fill ?? "none", stroke: o.stroke, "stroke-width": o.strokeWidth, opacity: o.opacity,
-        onClick: o.onClick, title: o.title,
-      });
-    },
-    circle(o) {
-      return svgNode("circle", {
-        cx: o.cx, cy: o.cy, r: o.r, fill: o.fill ?? "none", stroke: o.stroke,
-        "stroke-width": o.strokeWidth, opacity: o.opacity, onClick: o.onClick, title: o.title,
-      });
-    },
-    line(o) {
-      return svgNode("line", {
-        x1: o.x1, y1: o.y1, x2: o.x2, y2: o.y2, stroke: o.stroke ?? "var(--border)",
-        "stroke-width": o.strokeWidth ?? 1, "stroke-dasharray": o.dash,
-      });
-    },
-    path(o) {
-      return svgNode("path", {
-        d: o.d, fill: o.fill ?? "none", stroke: o.stroke, "stroke-width": o.strokeWidth, onClick: o.onClick, title: o.title,
-      });
-    },
+    svg: (width, height, children, opts = {}) => svgNode("svg", { viewBox: opts.viewBox ?? `0 0 ${width} ${height}`, class: "t-svg", preserveAspectRatio: "xMidYMid meet" }, children),
+    group: (children, opts = {}) => svgNode("g", { transform: opts.transform, opacity: opts.opacity }, children),
+    rect: (o) => svgNode("rect", { x: o.x, y: o.y, width: o.w, height: o.h, rx: o.r ?? 0, fill: o.fill ?? "none", stroke: o.stroke, "stroke-width": o.strokeWidth, opacity: o.opacity, onClick: o.onClick, title: o.title }),
+    circle: (o) => svgNode("circle", { cx: o.cx, cy: o.cy, r: o.r, fill: o.fill ?? "none", stroke: o.stroke, "stroke-width": o.strokeWidth, opacity: o.opacity, onClick: o.onClick, title: o.title }),
+    line: (o) => svgNode("line", { x1: o.x1, y1: o.y1, x2: o.x2, y2: o.y2, stroke: o.stroke ?? "var(--line)", "stroke-width": o.strokeWidth ?? 1, "stroke-dasharray": o.dash }),
+    path: (o) => svgNode("path", { d: o.d, fill: o.fill ?? "none", stroke: o.stroke, "stroke-width": o.strokeWidth, onClick: o.onClick, title: o.title }),
     text(o) {
-      const node = svgNode("text", {
-        x: o.x, y: o.y, "font-size": o.size ?? 12, "text-anchor": o.anchor ?? "start",
-        "dominant-baseline": o.baseline ?? "middle", fill: o.fill ?? "var(--fg)",
-        "font-weight": o.weight, onClick: o.onClick,
-      });
+      const node = svgNode("text", { x: o.x, y: o.y, "font-size": o.size ?? 12, "text-anchor": o.anchor ?? "start", "dominant-baseline": o.baseline ?? "middle", fill: o.fill ?? "var(--ink)", "font-weight": o.weight, onClick: o.onClick });
       node.textContent = o.text;
       return node;
     },
   };
 
   // ---------- primitives ----------
-
-  const listeners = new Set();
-  window.__topicsChanged = () => listeners.forEach((f) => f());
 
   const db = {
     query: (sql, params = []) => call("db.query", { sql, params }),
@@ -320,7 +243,7 @@
       return map;
     },
     list: () => call("proposals.list"),
-    open: (id) => call("proposals.open", { id }),
+    open: (id) => (window.__board ? window.__board.openProposal(id) : call("proposals.open", { id })),
   };
 
   const agent = {
@@ -334,72 +257,48 @@
     toast(String((error && error.message) || error));
   }
 
-  function toast(text) {
-    call("toast", { text }).catch(() => {});
+  function toast(text, opts = {}) {
+    if (window.__board) window.__board.toast(text, opts.undo);
+    else call("toast", { text }).catch(() => {});
   }
 
-  const t = {
-    topic: window.__topic,
-    module: window.__module,
-    ui,
-    draw,
-    db,
-    schedule,
-    agent,
-    proposals,
-    toast,
-    onChange: (f) => listeners.add(f),
-    refresh: () => rerender(),
-    today() {
-      const d = new Date();
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    },
-    formatDate(iso, opts = { weekday: "short", month: "short", day: "numeric" }) {
-      if (!iso) return "";
-      const d = new Date(iso.length === 10 ? `${iso}T12:00:00` : iso);
-      return isNaN(d) ? iso : d.toLocaleDateString(undefined, opts);
-    },
-  };
-
-  // ---------- boot ----------
-
-  let renderFn = null;
-  let rendering = false;
-  let pending = false;
-
-  async function rerender() {
-    if (!renderFn) return;
-    if (rendering) {
-      pending = true;
-      return;
-    }
-    rendering = true;
-    const root = document.getElementById("root");
-    try {
-      const next = document.createElement("div");
-      next.className = "t-module";
-      await renderFn(next, t);
-      const scroll = document.scrollingElement.scrollTop;
-      root.replaceChildren(next);
-      document.scrollingElement.scrollTop = scroll;
-    } catch (e) {
-      root.replaceChildren(el("div", { class: "t-error" }, el("strong", {}, "This module failed to render."), el("pre", {}, String((e && e.stack) || e))));
-      call("log", { level: "error", message: String((e && e.stack) || e) }).catch(() => {});
-    } finally {
-      rendering = false;
-      if (pending) {
-        pending = false;
-        rerender();
-      }
-    }
+  function confirmAction(opts) {
+    if (window.__board) return window.__board.confirm(opts);
+    return Promise.resolve(window.confirm(opts.title));
   }
 
-  window.__boot = (fn) => {
-    renderFn = typeof fn === "function" ? fn : fn && fn.render;
-    listeners.add(rerender);
-    rerender();
+  function forModule(module) {
+    return {
+      topic: window.__topic,
+      module,
+      ui, draw, db, schedule, proposals, agent,
+      toast,
+      confirm: confirmAction,
+      openLink: (url) => call("open", { url }),
+      refresh: () => window.__board && window.__board.renderModule(module.id),
+      card: { meta: (text) => window.__board && window.__board.setMeta(module.id, text) },
+      today() {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      },
+      formatDate(iso, opts = { weekday: "short", month: "short", day: "numeric" }) {
+        if (!iso) return "";
+        const d = new Date(iso.length === 10 ? `${iso}T12:00:00` : iso);
+        return isNaN(d) ? iso : d.toLocaleDateString(undefined, opts);
+      },
+      money(n) {
+        if (n === null || n === undefined || n === "") return "";
+        const v = Number(n);
+        return `$${v.toLocaleString("en-US", { minimumFractionDigits: v % 1 ? 2 : 0, maximumFractionDigits: 2 })}`;
+      },
+    };
+  }
+
+  window.Topics = { ui, draw, el, report, toast, call, forModule };
+  window.__modules = {};
+  window.__register = (id, fn) => {
+    window.__modules[id] = typeof fn === "function" ? fn : fn && fn.render;
   };
   window.addEventListener("error", (e) => call("log", { level: "error", message: String(e.message) }).catch(() => {}));
   window.addEventListener("unhandledrejection", (e) => report(e.reason));
-  window.Topics = t;
 })();

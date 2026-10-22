@@ -41,7 +41,8 @@ public final class TopicWorkspace: @unchecked Sendable {
 
     /// Opens the workspace at `base/<topic id>`, seeding it from `template`
     /// on first use.
-    public init(topic: Topic, base: URL, template: URL?) throws {
+    /// `substitutions` replace `{{key}}` in the template's Markdown files.
+    public init(topic: Topic, base: URL, template: URL?, substitutions: [String: String] = [:]) throws {
         self.topic = topic
         self.root = base.appendingPathComponent(topic.id, isDirectory: true)
         let fileManager = FileManager.default
@@ -51,6 +52,13 @@ public final class TopicWorkspace: @unchecked Sendable {
             if let template {
                 if fileManager.fileExists(atPath: root.path) { try fileManager.removeItem(at: root) }
                 try fileManager.copyItem(at: template, to: root)
+                try? fileManager.removeItem(at: root.appendingPathComponent("modules/.keep"))
+                for file in [Self.agentFile, Self.handoffFile] {
+                    let url = root.appendingPathComponent(file)
+                    guard var text = try? String(contentsOf: url, encoding: .utf8) else { continue }
+                    for (key, value) in substitutions { text = text.replacingOccurrences(of: "{{\(key)}}", with: value) }
+                    try text.write(to: url, atomically: true, encoding: .utf8)
+                }
             } else {
                 try fileManager.createDirectory(at: root, withIntermediateDirectories: true)
             }

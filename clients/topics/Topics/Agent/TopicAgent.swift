@@ -56,6 +56,37 @@ final class TopicAgent: ObservableObject {
         }
     }
 
+    struct ThreadItem {
+        let fromOwner: Bool
+        let text: String
+    }
+
+    /// The conversation as the owner sees it: their own words and the
+    /// helper's short replies, never the context sent with them.
+    var thread: [ThreadItem] {
+        reducer.timeline.suffix(12).compactMap { item -> ThreadItem? in
+            switch item.role {
+            case .user:
+                let display = AgentPrompt.displayText(item.text)
+                return display.isCheckIn || display.text.isEmpty ? nil : ThreadItem(fromOwner: true, text: display.text)
+            case .assistant:
+                let text = AgentChangeParser.strippingBlocks(item.text)
+                return text.isEmpty ? nil : ThreadItem(fromOwner: false, text: text)
+            }
+        }
+    }
+
+    /// A few words on what the helper is doing right now.
+    var doing: String {
+        guard isWorking else { return "" }
+        if isStopping { return "Stopping…" }
+        if let tool = reducer.tools.last(where: { $0.status == .running }) {
+            return tool.name.contains("search") || tool.name.contains("fetch") ? "Looking things up" : "Working on it"
+        }
+        if reducer.runStatus == .waitingForApproval { return "Waiting for your OK" }
+        return "Thinking it over"
+    }
+
     // MARK: Public
 
     func loadIfNeeded() {
@@ -66,7 +97,6 @@ final class TopicAgent: ObservableObject {
     func send(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        app.sidebarTab = .chat
         enqueue(.chat) { [unowned self] in
             let fingerprint = stateFingerprint()
             let prompt = AgentPrompt.chat(
@@ -218,9 +248,10 @@ final class TopicAgent: ObservableObject {
             }
         case .failed?:
             lastError = failure?.message ?? reducer.failure?.message ?? "\(topic.agentName) ran into a problem."
+            board.showToast("\(topic.agentName) ran into a problem and stopped.")
         case .cancelled?:
             if !stopRequested { lastError = "\(topic.agentName) stopped before finishing." }
-            app.showToast(stopRequested ? "Stopped \(topic.agentName)" : "\(topic.agentName) stopped")
+            board.showToast(stopRequested ? "Stopped. Nothing on the board changed." : "\(topic.agentName) stopped before finishing.")
         default:
             lastError = "\(topic.agentName) is taking a long time. The answer will show up when it's ready."
         }
@@ -306,12 +337,14 @@ final class TopicAgent: ObservableObject {
         }
         guard let changes, !changes.ops.isEmpty else { return }
         do {
+            let previousModules = Set(board.board?.modules.map(\.id) ?? [])
             let applied = try AgentChangeApplier(builder: board.builder)
                 .apply(changes, to: board.workspace, author: topic.agentName)
             outcomes[itemID] = Outcome(summary: applied.summary, error: nil)
             saveOutcomes()
             board.reload()
             board.dataChanged()
+            board.noteAgentChange(applied, previousModules: previousModules)
             if kind != .chat { board.clearModuleErrors() }
             retriesLeft = 1
         } catch {
