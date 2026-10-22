@@ -16,9 +16,9 @@ Status: design agreed 2026-10-21. Nothing is built yet.
    tasks as labels ("Garden: planting, Sat 9–11"), never the detail behind them.
 3. **Centralize the effect, not the detail.** One event can produce two records:
    a labeled block in the shared schedule and the full detail inside the topic.
-4. **Sealed topics share nothing.** A sealed topic reads core but writes nothing
-   out: no promotion, no headlines, and its time appears to others only as
-   `Busy`.
+4. **Sealed topics share nothing but people.** A sealed topic reads core but
+   writes nothing out: no promotion, no headlines, and its time appears to
+   others only as `Busy`. People it meets still join core.
 5. **The owner can always override.** Every memory shows where it lives and can
    be moved. Automatic routing is only the default.
 6. **Walls are enforced in code, not prompts.** Isolation is a query filter and a
@@ -84,10 +84,10 @@ them. How to deal with them is per topic, as a **lens**:
 | --- | --- | --- | --- |
 | Dana, landscaper | name, phone, email | text her, casual; does the fall cleanup | invoices by email; pay within 30 days |
 
-A topic sees only its own lens. **People first met in a sealed topic stay local
-to it** — adding a therapist to core would reveal the therapist to every topic.
-If the person already exists in core, the sealed topic adds only a private lens
-and never changes the core record.
+A topic sees only its own lens. **People are always core**, including people
+first met in a sealed topic (decided 2026-10-21): every topic can see who a
+person is, even if that reveals that, say, a therapist exists. The sealed rule
+covers the topic's memories and schedule detail, not the person record.
 
 ## Data model
 
@@ -95,8 +95,7 @@ and never changes the core record.
 Topic        id, name, icon, instructions, enabled_tools, sealed
              → one Veetbot AgentSpec per topic
 
-Person       id, name, phones, emails, how_known, home_topic_id | null
-             (home_topic_id set only for people local to a sealed topic)
+Person       id, name, phones, emails, how_known        ← always core
 PersonLens   person_id, topic_id, channel, tone, role, notes
 
 Memory       id, topic_id | null (null = core), text, kind, confidence, source

@@ -194,8 +194,9 @@ class Sessions:
         agent_id: str,
         metadata: dict[str, object],
         browser_profile_id: UUID | None = None,
+        topic_id: str | None = None,
     ) -> SessionView:
-        del owner
+        del owner, topic_id
         self.browser_profile_id = browser_profile_id
         return SessionView(
             id=UUID("00000000-0000-0000-0000-0000000000da"),
@@ -218,8 +219,9 @@ class MetadataRejectingSessions(Sessions):
         agent_id: str,
         metadata: dict[str, object],
         browser_profile_id: UUID | None = None,
+        topic_id: str | None = None,
     ) -> SessionView:
-        del owner, agent_id, metadata, browser_profile_id
+        del owner, agent_id, metadata, browser_profile_id, topic_id
         raise SessionMetadataValidationError("session metadata is invalid")
 
 
@@ -230,8 +232,9 @@ class UnexpectedValueErrorSessions(Sessions):
         agent_id: str,
         metadata: dict[str, object],
         browser_profile_id: UUID | None = None,
+        topic_id: str | None = None,
     ) -> SessionView:
-        del owner, agent_id, metadata, browser_profile_id
+        del owner, agent_id, metadata, browser_profile_id, topic_id
         raise ValueError("unexpected downstream value error")
 
 

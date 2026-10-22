@@ -66,6 +66,7 @@ from agent_core.ports.semantic_memory import SemanticMemoryIndex
 from agent_core.ports.semantic_work import SemanticWorkStore
 from agent_core.ports.skills import SkillRepository
 from agent_core.ports.surfaces import SurfaceRepositories
+from agent_core.ports.topics import TopicStore
 
 _UNIT_OF_WORK_DEPTH: ContextVar[int] = ContextVar("unit_of_work_depth", default=0)
 logger = logging.getLogger(__name__)
@@ -118,6 +119,7 @@ class UnitOfWorkRepositories:
     personas: PersonaStore
     model_settings: ModelSettingsStore
     folders: FolderStore
+    topics: TopicStore
     email: EmailStore
     calls: CallStore
     people: PeopleStore
@@ -189,6 +191,7 @@ class MemoryUnitOfWork:
         self.personas = repositories.personas
         self.model_settings = repositories.model_settings
         self.folders = repositories.folders
+        self.topics = repositories.topics
         self.email = repositories.email
         self.calls = repositories.calls
         self.people = repositories.people
@@ -326,6 +329,7 @@ class PostgresUnitOfWork:
         self.personas = repositories.personas
         self.model_settings = repositories.model_settings
         self.folders = repositories.folders
+        self.topics = repositories.topics
         self.email = repositories.email
         self.calls = repositories.calls
         self.people = repositories.people

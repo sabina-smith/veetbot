@@ -55,6 +55,7 @@ MEMORY_VIEW_FIELDS = {
     "status",
     "polarity",
     "scope",
+    "topic_id",  # topic walls (topics/ARCHITECTURE.md)
     "portability",
     "authority",
     "sensitivity",

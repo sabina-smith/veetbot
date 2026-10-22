@@ -1660,6 +1660,8 @@ class PostgresReconsolidationStore:
                     or_(MemoryRow.expires_at.is_(None), MemoryRow.expires_at > now),
                     or_(MemoryRow.valid_to.is_(None), MemoryRow.valid_to > now),
                     MemoryRow.scope == anchor.scope,
+                    # Topic wall: neighbours come from the anchor's own topic only.
+                    MemoryRow.topic_id.is_not_distinct_from(getattr(anchor, "topic_id", None)),
                     *([MemoryRow.portability == "portable"] if anchor.scope == "user" else []),
                     or_(
                         MemoryRow.subject == anchor.subject,

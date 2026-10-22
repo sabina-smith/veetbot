@@ -654,6 +654,9 @@ class MemoryRecord(BaseModel):
     tenant_id: str = Field(min_length=1)
     principal_id: str = Field(min_length=1)
     scope: str = Field(min_length=1, max_length=256)
+    # Topic wall (topics/ARCHITECTURE.md): None is core, visible to every topic;
+    # a topic id is visible only to that topic. A hard filter, never a ranking hint.
+    topic_id: str | None = Field(default=None, min_length=1, max_length=128)
     subject: str = Field(min_length=1, max_length=512)
     statement: str = Field(min_length=1, max_length=8192)
     source_session_id: UUID
@@ -747,6 +750,10 @@ class MemoryBrowseQuery(BaseModel):
     subject: str | None = None
     session_id: UUID | None = None
     text: str | None = None
+    # Owner browsing is topic-wide by default; filter_topic narrows it to exactly
+    # one topic's own beliefs (topic_id None: core only).
+    filter_topic: bool = False
+    topic_id: str | None = Field(default=None, min_length=1, max_length=128)
     limit: int = Field(default=50, ge=1, le=200)
     cursor: tuple[int, UUID] | None = None
     # None selects both; True the review queue; False everything already reviewed
@@ -917,6 +924,9 @@ class RecallQuery(BaseModel):
     tenant_id: str
     principal_id: str
     current_scope: str
+    # The reading session's topic; None reads core only. Set from the session by
+    # trusted code, never from a tool argument.
+    topic_id: str | None = Field(default=None, min_length=1, max_length=128)
     text: str | None = None
     subjects: list[str] = Field(default_factory=list)
     belief_types: list[BeliefType] = Field(default_factory=list)

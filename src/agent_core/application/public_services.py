@@ -443,6 +443,7 @@ class PublicSessionService:
         agent_id: str,
         metadata: dict[str, object],
         browser_profile_id: UUID | None = None,
+        topic_id: str | None = None,
     ) -> SessionView:
         require_scope(principal, "session.write")
         if SESSION_RESERVED_METADATA_KEYS.intersection(metadata):
@@ -458,6 +459,9 @@ class PublicSessionService:
             raise SessionMetadataValidationError("session metadata exceeds 8 KiB")
         now = self._clock.now()
         async with self._uow_factory() as uow:
+            if topic_id is not None:
+                # A session's topic must be one the owner created (NotFoundError).
+                await uow.topics.get(principal, topic_id)
             agent = await self._resolve_agent(uow, agent_id, principal)
             if browser_profile_id is not None:
                 profile = await uow.browser_profiles.get(browser_profile_id, principal)
@@ -481,6 +485,7 @@ class PublicSessionService:
                 agent_id=agent.id,
                 agent_version=agent.version,
                 status=SessionStatus.ACTIVE,
+                topic_id=topic_id,
                 metadata=bound_metadata,
                 created_at=now,
                 updated_at=now,
@@ -2237,6 +2242,7 @@ class PublicMemoryService:
         cursor: str | None,
         flagged: bool | None = None,
         include_derived: bool = False,
+        topic: str | None = None,
     ) -> Page[MemoryView | DerivedMemoryView]:
         require_scope(principal, "memory.read")
         effective_limit = min(max(limit, 1), 200)
@@ -2253,6 +2259,9 @@ class PublicMemoryService:
             limit=effective_limit,
             cursor=decoded,
             flagged_for_review=flagged,
+            # "core" names the core layer; any other value is one topic's own beliefs.
+            filter_topic=topic is not None,
+            topic_id=None if topic in (None, "core") else topic,
         )
         if include_derived and not self._derived_enabled:
             raise MemoryCursorError("derived memory browsing is unavailable")

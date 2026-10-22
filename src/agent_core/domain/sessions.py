@@ -98,6 +98,8 @@ class Session(BaseModel):
     agent_version: str
     status: SessionStatus
     title: str | None = None
+    # Topic wall (topics/ARCHITECTURE.md): fixed at creation; None is core.
+    topic_id: str | None = Field(default=None, min_length=1, max_length=128)
     metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime

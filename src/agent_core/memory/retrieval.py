@@ -65,6 +65,7 @@ from agent_core.memory.source_recovery import (
     BoundedSourceRecovery,
     SourceRecoveryUnavailableError,
 )
+from agent_core.memory.topics import session_topic
 from agent_core.ports.determinism import Clock, IdFactory
 from agent_core.ports.persistence import RepositoryUnitOfWork, UnitOfWorkFactory
 from agent_core.ports.semantic_memory import RuntimeSemanticQueries, SemanticQueryLookup
@@ -535,6 +536,11 @@ class HybridMemoryRetriever:
             )
         )
         effective_query = self._effective_query(effective_query, moment)
+        # Topic wall (topics/ARCHITECTURE.md): the reading session's topic always
+        # replaces whatever topic the caller put on the query.
+        effective_query = effective_query.model_copy(
+            update={"topic_id": await session_topic(uow, session_id, self._principal)}
+        )
         semantic_hits: list[SemanticHit] = []
         semantic_key: str | None = None
         semantic_latency = 0

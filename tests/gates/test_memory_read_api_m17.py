@@ -59,7 +59,7 @@ PRINCIPAL_ID = "local-user"
 SESSION_A = UUID(int=901)
 SESSION_B = UUID(int=902)
 
-# The spec's exposure list, verbatim: thirty-one names that serialize.
+# The spec's exposure list, verbatim: thirty-one names that serialize, plus topic_id.
 EXPOSED_FIELDS = (
     "id",
     "subject",
@@ -71,6 +71,7 @@ EXPOSED_FIELDS = (
     "status",
     "polarity",
     "scope",
+    "topic_id",  # topic walls (topics/ARCHITECTURE.md)
     "portability",
     "authority",
     "sensitivity",
@@ -926,7 +927,7 @@ def test_the_projection_is_exactly_the_exposure_list() -> None:
     """
 
     assert set(MemoryView.model_fields) == set(EXPOSED_FIELDS)
-    assert len(EXPOSED_FIELDS) == 31
+    assert len(EXPOSED_FIELDS) == 32  # 31 spec names plus topic_id
     assert MemoryView.model_config["extra"] == "forbid"
     assert MemoryView.model_config["frozen"] is True
     assert set(WITHHELD_FIELDS).isdisjoint(MemoryView.model_fields)

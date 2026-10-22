@@ -62,6 +62,7 @@ from agent_core.application.services import (
     ScheduleService,
     SessionService,
     SurfaceService,
+    TopicService,
 )
 from agent_core.config import Settings
 from agent_core.domain.agents import Principal
@@ -106,6 +107,7 @@ from agent_core.domain.schedules import (
     ScheduleRecord,
     ScheduleState,
 )
+from agent_core.domain.topics import TopicCreateRequest, TopicUpdateRequest, TopicView
 from agent_core.domain.views import (
     ApprovalFilters,
     ApprovalView,
@@ -273,6 +275,8 @@ class CreateSessionRequest(BaseModel):
     agent_id: str = Field(min_length=1)
     metadata: dict[str, object] = Field(default_factory=dict)
     browser_profile_id: UUID | None = None
+    # Topic wall: omitted creates a core session (topics/ARCHITECTURE.md).
+    topic_id: str | None = Field(default=None, min_length=1, max_length=128)
 
 
 class MessageRequest(BaseModel):
@@ -709,6 +713,7 @@ def create_app(
                 body.agent_id,
                 body.metadata,
                 browser_profile_id=body.browser_profile_id,
+                topic_id=body.topic_id,
             )
         except SessionMetadataValidationError as exc:
             raise MalformedRequestError("session metadata is malformed") from exc
@@ -1686,6 +1691,7 @@ def create_app(
         text: str | None = None,
         flagged: bool | None = None,
         include_derived: bool = False,
+        topic: Annotated[str | None, Query(min_length=1, max_length=128)] = None,
     ) -> Page[MemoryView | DerivedMemoryView]:
         # A belief body is principal-scoped and sensitivity-bearing, so no
         # shared or on-disk cache may keep it; the artifact content route
@@ -1708,6 +1714,7 @@ def create_app(
                 cursor=cursor,
                 flagged=flagged,
                 include_derived=include_derived,
+                topic=topic,
             )
         except MemoryCursorError as exc:
             raise MalformedRequestError("memory cursor is malformed") from exc
@@ -2003,6 +2010,38 @@ def create_app(
 
     if settings.thread_folders_api_enabled:
         app.include_router(folder_router)
+
+    # Topics (topics/ARCHITECTURE.md). Composed services without a topic
+    # registry (older test doubles) simply do not serve these routes.
+    topic_service = cast("TopicService | None", getattr(services, "topics", None))
+    if topic_service is not None:
+        topics = topic_service
+
+        @app.get("/v1/topics", openapi_extra={"required_scope": "session.read"})
+        async def list_topics(
+            response: Response,
+            authenticated: Annotated[Principal, secured("session.read")],
+        ) -> Page[TopicView]:
+            """List the owner's topics."""
+            response.headers["Cache-Control"] = PRIVATE_NO_STORE
+            return Page(items=await topics.list(authenticated))
+
+        @app.post("/v1/topics", status_code=201, openapi_extra={"required_scope": "session.write"})
+        async def create_topic(
+            body: TopicCreateRequest,
+            authenticated: Annotated[Principal, secured("session.write")],
+        ) -> TopicView:
+            """Create a topic; a sealed topic shares nothing outside itself."""
+            return await topics.create(authenticated, body)
+
+        @app.patch("/v1/topics/{topic_id}", openapi_extra={"required_scope": "session.write"})
+        async def update_topic(
+            topic_id: str,
+            body: TopicUpdateRequest,
+            authenticated: Annotated[Principal, secured("session.write")],
+        ) -> TopicView:
+            """Rename a topic or change whether it is sealed."""
+            return await topics.update(authenticated, topic_id, body)
 
     @app.get("/health/live", openapi_extra={"required_scope": None})
     async def health_live(response: Response) -> dict[str, str]:

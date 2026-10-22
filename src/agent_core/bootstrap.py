@@ -93,6 +93,7 @@ from agent_core.adapters.memory.reconsolidation_evidence import ReconsolidationE
 from agent_core.adapters.memory.reconsolidation_index import ReconsolidationIndex
 from agent_core.adapters.memory.semantic_memory import InMemorySemanticMemoryIndex
 from agent_core.adapters.memory.semantic_work import InMemorySemanticWorkStore
+from agent_core.adapters.memory.topics import InMemoryTopicStore
 from agent_core.adapters.memory.transactions import MemoryTransaction
 from agent_core.adapters.models.chat_completions import ChatCompletionsProvider
 from agent_core.adapters.models.fake import FakeModelProvider
@@ -218,6 +219,7 @@ from agent_core.adapters.persistence.surfaces import (
     PostgresSurfaceRepositories,
     PostgresSurfaceSessionRepository,
 )
+from agent_core.adapters.persistence.topic_repositories import PostgresTopicStore
 from agent_core.adapters.persistence.unit_of_work import (
     MemoryUnitOfWorkFactory,
     PostgresRepositoryFactory,
@@ -385,6 +387,7 @@ from agent_core.application.surfaces import (
     SurfaceManagementService,
     surface_notice_text,
 )
+from agent_core.application.topics import PublicTopicService
 from agent_core.application.trajectory_service import (
     TrajectoryExportService,
     TrajectoryRedactor,
@@ -790,6 +793,8 @@ class ApplicationServices:
     model_settings: PublicModelSettingsServiceContract | None = None
     # ADR-0129: present only when BROWSER_TASK_GRANTS_ENABLED is set.
     browser_task_grants: PublicBrowserTaskGrantServiceContract | None = None
+    # Topics (topics/ARCHITECTURE.md).
+    topics: PublicTopicService | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1309,6 +1314,7 @@ def _memory_uow_repositories(
         memory_transaction=memories._transaction.transaction,
         model_settings=InMemoryModelSettingsStore(),
         folders=InMemoryFolderStore(),
+        topics=InMemoryTopicStore(),
         email=InMemoryEmailStore(),
         calls=InMemoryCallStore(),
         people=people,
@@ -1409,6 +1415,7 @@ def _postgres_repository_factory(
             reconsolidation=reconsolidation,
             model_settings=PostgresModelSettingsStore(session),
             folders=PostgresFolderStore(session),
+            topics=PostgresTopicStore(session),
             email=PostgresEmailStore(session),
             calls=PostgresCallStore(session),
             people=people,
@@ -4825,6 +4832,7 @@ async def _compose(
                 uow_factory=uow_factory, clock=clock, ids=ids, catalog=model_settings_catalog
             ),
             folders=PublicFolderService(uow_factory=uow_factory, clock=clock, ids=ids),
+            topics=PublicTopicService(uow_factory=uow_factory, clock=clock),
             browser_task_grants=(
                 PublicBrowserTaskGrantService(uow_factory=uow_factory, clock=clock)
                 if task_grants_enabled

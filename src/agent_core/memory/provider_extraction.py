@@ -57,6 +57,7 @@ from agent_core.memory.formation import (
     contains_memory_injection,
     grounding_tokens,
 )
+from agent_core.memory.topics import events_topic
 from agent_core.model.cost import price_usage
 from agent_core.model.streaming import ModelStreamError, collect_turn
 from agent_core.ports.determinism import Clock, IdFactory
@@ -913,9 +914,15 @@ class ProviderAssistedCandidateExtractor:
             return deterministic
 
         async with self._uow_factory() as uow:
+            topic_id = await events_topic(uow, events, principal)
             if self._repaired:
                 related = _related_beliefs(
-                    await uow.memories.list_memories(principal, limit=RELATED_BELIEF_CANDIDATES),
+                    await uow.memories.list_memories(
+                        principal,
+                        limit=RELATED_BELIEF_CANDIDATES,
+                        topic_wall=True,
+                        topic_id=topic_id,
+                    ),
                     [str(item["text"]) for item in selected],
                 )
             else:
@@ -923,7 +930,9 @@ class ProviderAssistedCandidateExtractor:
                 # sensitivity rule is a safety floor shared by every policy.
                 related = [
                     belief
-                    for belief in await uow.memories.list_memories(principal, limit=50)
+                    for belief in await uow.memories.list_memories(
+                        principal, limit=50, topic_wall=True, topic_id=topic_id
+                    )
                     if belief.sensitivity in PROVIDER_EGRESS_SENSITIVITIES
                 ]
         job_id = self._ids.new_id()
