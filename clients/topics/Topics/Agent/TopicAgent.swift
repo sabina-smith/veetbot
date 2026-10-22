@@ -248,10 +248,10 @@ final class TopicAgent: ObservableObject {
             }
         case .failed?:
             lastError = failure?.message ?? reducer.failure?.message ?? "\(topic.agentName) ran into a problem."
-            board.showToast("\(topic.agentName) ran into a problem and stopped.")
+            board.showToast("I ran into a problem and stopped. Try asking again?", fromHelper: true)
         case .cancelled?:
             if !stopRequested { lastError = "\(topic.agentName) stopped before finishing." }
-            board.showToast(stopRequested ? "Stopped. Nothing on the board changed." : "\(topic.agentName) stopped before finishing.")
+            board.showToast(stopRequested ? "Stopped. Nothing on the board changed." : "I stopped before finishing.", fromHelper: true)
         default:
             lastError = "\(topic.agentName) is taking a long time. The answer will show up when it's ready."
         }

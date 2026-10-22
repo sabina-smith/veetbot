@@ -14,7 +14,10 @@ of life. See `DESIGN-BRIEF.md` for what the product does and
   schedule and its redaction rules, the per-topic workspace (files, git,
   SQLite), proposals, and parsing and applying the agent's changes.
 - `Bundle/sdk/`: the design system (`topics-sdk.css`), the module runtime
-  (`topics-sdk.js`) and its types (`topics-sdk.d.ts`), and the pages:
+  (`topics-sdk.js`) and its types (`topics-sdk.d.ts`), the ready-made
+  cards (`cards.js`: list, table, recurring, shopping, notes, schedule, all
+  stored in one `items` table), the pixel helpers (`sprite.js`), and the
+  pages:
   `board.js` (masthead, Needs you, cards, ask bar, decision sheet),
   `home.js` and `newtopic.js`.
 - `Bundle/templates/`: starting workspaces for Garden, Household, and

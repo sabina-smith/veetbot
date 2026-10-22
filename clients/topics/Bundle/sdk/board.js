@@ -99,18 +99,19 @@
 
   async function renderModule(id) {
     const c = cards[id];
-    const fn = window.__modules[id];
     if (!c) return;
+    const builtIn = c.module.kind && c.module.kind !== "custom";
+    const fn = builtIn ? (window.__cards || {})[c.module.kind] : window.__modules[id];
     if (rendering[id]) { rendering[id] = "again"; return; }
     rendering[id] = true;
     try {
-      if (!fn) throw new Error(`modules/${id}.ts did not load`);
+      if (!fn) throw new Error(builtIn ? `unknown card kind ${c.module.kind}` : `modules/${id}.ts did not load`);
       const next = el("div", { class: "t-module" });
       // Cards often pass optional parts as null; DOM append would print "null".
       const clean = (nodes) => nodes.flat(Infinity).filter((n) => n !== null && n !== undefined && n !== false);
       next.append = (...nodes) => Element.prototype.append.apply(next, clean(nodes));
       next.replaceChildren = (...nodes) => Element.prototype.replaceChildren.apply(next, clean(nodes));
-      await fn(next, forModule({ id, title: c.module.title }));
+      await fn(next, forModule({ id, title: c.module.title, kind: c.module.kind ?? "custom", columns: c.module.columns ?? null }));
       c.body.replaceWith(next);
       c.body = next;
     } catch (e) {
@@ -136,46 +137,111 @@
     if (cards[id]) cards[id].meta.textContent = text ?? "";
   }
 
-  // ---------- dock: toast, thread, ask ----------
+  // ---------- dock: toast, thread, ask bar, and the pixel helper ----------
+
+  const toastSlot = el("div", { style: { display: "flex", justifyContent: "center" } });
+  const threadSlot = el("div");
+  const formSlot = el("div");
+  const bubbleSlot = el("div");
+  const helperBody = el("button", { class: "px-body", type: "button", "aria-label": `${helper}: show the conversation`, onclick: () => { threadOpen = !threadOpen; renderDock(); } },
+    window.Topics.sprite(helper, topic.accent));
+  const helperEl = el("div", { class: "px-helper" }, bubbleSlot, helperBody);
+  dock.append(el("div", { class: "tp-dock-inner" }, toastSlot, threadSlot, formSlot, helperEl));
 
   let toastNode = null;
   function toast(text, undo) {
     window.clearTimeout(toastTimer);
     toastNode = el("div", { class: "tp-toast", role: "status" }, text,
       undo ? el("button", { type: "button", onclick: () => { hideToast(); Promise.resolve(undo()).catch(report); } }, "Undo") : null);
-    renderDock();
+    toastSlot.replaceChildren(toastNode);
     toastTimer = window.setTimeout(hideToast, 6000);
   }
-  function hideToast() { toastNode = null; renderDock(); }
+  function hideToast() { toastNode = null; toastSlot.replaceChildren(); }
+
+  // What the helper says in its bubble.
+  let said = null;            // { text, undo?, until } after finishing something
+  let phraseIndex = 0;
+  let phraseTimer;
+  const genericPhrases = [
+    "Thinking it over…", `Looking over the ${topic.name} board…`, "Remembering where we left off…",
+    "Weighing it up…", "Jotting things down…", "Nearly there…",
+  ];
+  const lookupPhrases = ["Looking things up…", "Reading a few pages…", "Comparing options…", "Checking prices…"];
+  const jargon = /\.(md|ts|json|sql)\b|workspace|database|handoff|module|schema|commit|sql|table/i;
+
+  function phrases() {
+    const own = [];
+    if (state.helper.thinking && !jargon.test(state.helper.thinking)) own.push(`${state.helper.thinking.replace(/[.…]+$/, "")}…`);
+    if (state.helper.doing === "Looking things up") return [...own, ...lookupPhrases];
+    if (state.helper.doing === "Waiting for your OK") return ["I need your OK on something."];
+    return [...own, ...genericPhrases];
+  }
+
+  function renderHelper() {
+    const working = state.helper.working;
+    helperEl.classList.toggle("busy", working);
+    window.clearTimeout(phraseTimer);
+    if (working) {
+      const list = phrases();
+      const text = list[phraseIndex % list.length];
+      bubbleSlot.replaceChildren(el("div", { class: "px-bubble", role: "status" }, state.helper.stopping ? "Stopping…" : text));
+      phraseTimer = window.setTimeout(() => { phraseIndex += 1; renderHelper(); }, 2600);
+      return;
+    }
+    if (said && Date.now() < said.until) {
+      bubbleSlot.replaceChildren(el("div", { class: "px-bubble", role: "status" }, said.text,
+        said.undo ? el("span", {}, " ", el("button", { type: "button", onclick: () => { said.undo(); said = null; renderHelper(); } }, "Undo")) : null));
+      phraseTimer = window.setTimeout(renderHelper, said.until - Date.now());
+      return;
+    }
+    const waiting = state.proposals[0];
+    bubbleSlot.replaceChildren(waiting
+      ? el("div", { class: "px-bubble attention" },
+          el("button", { type: "button", style: { textDecoration: "none", fontWeight: 600, textAlign: "left" }, onclick: () => openProposal(waiting.id) },
+            state.proposals.length > 1 ? `${state.proposals.length} things need your call` : `Your call: ${waiting.title}`, " →"))
+      : "");
+  }
+
+  function helperSays(text, undo) {
+    said = { text, undo, until: Date.now() + 7000 };
+    helperEl.classList.remove("hop");
+    void helperEl.offsetWidth;
+    helperEl.classList.add("hop");
+    renderHelper();
+  }
 
   function renderDock() {
     const working = state.helper.working;
     const input = el("input", {
       value: draft, "aria-label": `Ask ${helper}`,
-      placeholder: working ? "Busy — you can keep working on the board" : "Ask, or hand something over…",
+      placeholder: working ? "Busy — you can keep working on the board" : `Ask ${helper}, or hand something over…`,
     });
     input.addEventListener("input", () => { draft = input.value; send.disabled = !draft.trim() || working; });
-    input.addEventListener("focus", () => { if (state.thread.length && !threadOpen) { threadOpen = true; renderDock(); focusAsk(); } });
+    input.addEventListener("focus", () => { if (state.thread.length && !threadOpen) { threadOpen = true; renderThread(); } });
     const send = el("button", { class: "tp-send", type: "submit", disabled: !draft.trim() || working, "aria-label": `Send to ${helper}` }, "↑");
     const form = el("form", { class: "tp-ask" },
-      el("span", { class: "tp-ask-name" }, helper),
-      working && state.helper.doing ? el("span", { class: "tp-ask-doing pulse" }, state.helper.doing) : null,
       input,
       !draft && !working && topic.suggestion ? el("button", { class: "tp-suggest", type: "button", onclick: () => ask(topic.suggestion) }, `“${topic.suggestion}”`) : null,
       working ? el("button", { class: "tp-stop", type: "button", onclick: () => call("stop"), disabled: state.helper.stopping }, state.helper.stopping ? "Stopping" : "Stop") : send);
     form.addEventListener("submit", (event) => { event.preventDefault(); ask(draft); });
-
-    const thread = threadOpen && (state.thread.length || working)
-      ? el("div", { class: "tp-thread" },
-          el("div", { class: "tp-thread-head" }, el("span", { class: "eyebrow" }, helper),
-            el("button", { type: "button", "aria-label": "Hide conversation", onclick: () => { threadOpen = false; renderDock(); } }, "✕")),
-          el("ul", {}, state.thread.slice(-4).map((m) => el("li", { class: m.from === "you" ? "you" : "" }, m.text)),
-            working ? el("li", {}, el("div", { class: "tp-dots" }, el("span"), el("span"), el("span"))) : null))
-      : null;
     const hadFocus = document.activeElement && document.activeElement.closest && document.activeElement.closest(".tp-ask");
-    dock.replaceChildren(el("div", { class: "tp-dock-inner" }, toastNode, thread, form));
+    formSlot.replaceChildren(form);
+    renderThread();
+    renderHelper();
     if (hadFocus) focusAsk();
   }
+
+  function renderThread() {
+    const working = state.helper.working;
+    threadSlot.replaceChildren(threadOpen && (state.thread.length || working)
+      ? el("div", { class: "tp-thread" },
+          el("div", { class: "tp-thread-head" }, el("span", { class: "eyebrow" }, helper),
+            el("button", { type: "button", "aria-label": "Hide conversation", onclick: () => { threadOpen = false; renderThread(); } }, "✕")),
+          el("ul", {}, state.thread.slice(-4).map((m) => el("li", { class: m.from === "you" ? "you" : "" }, m.text)),
+            working ? el("li", {}, el("div", { class: "tp-dots" }, el("span"), el("span"), el("span"))) : null))
+      : "");
+  }
+
   function focusAsk() {
     const input = dock.querySelector(".tp-ask input");
     if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
@@ -186,7 +252,6 @@
     call("ask", { text: text.trim() });
     state.thread = [...state.thread, { from: "you", text: text.trim() }];
     draft = "";
-    threadOpen = true;
     renderDock();
   }
 
@@ -296,7 +361,9 @@
     renderDock();
     if (next.toast && next.toast.id !== lastToastID) {
       lastToastID = next.toast.id;
-      toast(next.toast.text, next.toast.commit ? () => call("undo", { commit: next.toast.commit }) : undefined);
+      const undo = next.toast.commit ? () => call("undo", { commit: next.toast.commit }) : undefined;
+      if (next.toast.fromHelper) helperSays(next.toast.text, undo);
+      else toast(next.toast.text, undo);
     }
     if (next.openProposal) openProposal(next.openProposal);
   };

@@ -144,3 +144,26 @@ final class AgentChangeApplierTests: XCTestCase {
         XCTAssertThrowsError(try applier.apply(changes, to: ws, author: "Fern"))
     }
 }
+
+final class BoardKindsTests: XCTestCase {
+    func testBuiltInCardsNeedNoModuleFile() throws {
+        let board = Board(modules: [
+            BoardModule(id: "todo", title: "To do", span: 6, kind: "list"),
+            BoardModule(id: "people", title: "People", span: 6, kind: "table", columns: [CardColumn(key: "title", label: "Who")]),
+        ])
+        XCTAssertNoThrow(try board.validate(existingModules: []))
+    }
+
+    func testUnknownKindsAndMissingCustomFilesAreRefused() {
+        XCTAssertThrowsError(try Board(modules: [BoardModule(id: "x", title: "X", kind: "gallery")]).validate(existingModules: []))
+        XCTAssertThrowsError(try Board(modules: [BoardModule(id: "x", title: "X", kind: "custom")]).validate(existingModules: []))
+        XCTAssertNoThrow(try Board(modules: [BoardModule(id: "x", title: "X", kind: "custom")]).validate(existingModules: ["x"]))
+    }
+
+    func testDecodesBoardJSONWithKinds() throws {
+        let json = #"{"columns": 12, "modules": [{"id": "seeds", "title": "Seeds", "span": 4, "kind": "table", "columns": [{"key": "title", "label": "Seed"}, {"key": "sow", "label": "Sow"}]}]}"#
+        let board = try JSONDecoder().decode(Board.self, from: Data(json.utf8))
+        XCTAssertEqual(board.modules[0].columns?.map(\.key), ["title", "sow"])
+        XCTAssertFalse(board.modules[0].isCustom)
+    }
+}

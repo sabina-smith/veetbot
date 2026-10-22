@@ -65,11 +65,26 @@ final class AppModel: ObservableObject {
         let topic = try topicStore.add(name: name, accentHex: colour, agentName: helper, sealed: sealed)
         topics = topicStore.topics
         try open(topic)
+        // The starter board is on screen at once; the helper tidies it after.
+        if let board = boards[topic.id] {
+            let answer = { (i: Int) in answers.indices.contains(i) ? answers[i].a : "" }
+            try StarterBoard.apply(to: board.workspace, answers: .init(about: answer(0), onYourMind: answer(1), helpers: answer(2)))
+            board.reload()
+        }
         screen = .topic(topic.id)
-        let told = answers.map { "\($0.q)\n\($0.a)" }.joined(separator: "\n\n")
+        let told = answers.filter { !$0.a.isEmpty }.map { "\($0.q)\n\($0.a)" }.joined(separator: "\n\n")
         agents[topic.id]?.checkIn(
             reason: "You set up \(topic.name)",
-            focus: "The owner just created this topic and answered your first questions:\n\n\(told)\n\nSketch the first board now."
+            focus: """
+            The owner just created this topic and answered your first questions:
+
+            \(told)
+
+            A starter board is already on screen, built from those answers with ready-made cards: \
+            "On your mind" (list), "About \(topic.name)" (notes), "People" (table) and "Coming up" (schedule). \
+            Tidy it quickly: fix rows that were split badly, add a due date or detail where they implied one, \
+            and add at most one more ready-made card if it clearly helps. Keep this visit short.
+            """
         )
     }
 

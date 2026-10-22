@@ -103,6 +103,8 @@ enum PageHTML {
     static let styles = resource("sdk/topics-sdk.css")
     static let sdk = resource("sdk/topics-sdk.js")
     static let boardScript = resource("sdk/board.js")
+    static let spriteScript = resource("sdk/sprite.js")
+    static let cardsScript = resource("sdk/cards.js")
     static let homeScript = resource("sdk/home.js")
     static let newTopicScript = resource("sdk/newtopic.js")
 
@@ -114,7 +116,11 @@ enum PageHTML {
     static func board(topic: Topic, board: Board?, modules: [String: String]) -> String {
         let columns = max(board?.columns ?? 12, 1)
         let layout: [[String: Any]] = (board?.modules ?? []).map { module in
-            ["id": module.id, "title": module.title, "span": max(1, min(12, module.span * 12 / columns))]
+            [
+                "id": module.id, "title": module.title, "span": max(1, min(12, module.span * 12 / columns)),
+                "kind": module.kind ?? "custom",
+                "columns": module.columns.map { $0.map { ["key": $0.key, "label": $0.label] } } ?? NSNull(),
+            ]
         }
         let context: [String: Any] = [
             "topic": [
@@ -124,7 +130,7 @@ enum PageHTML {
             "layout": ["modules": layout],
         ]
         var moduleScripts = ""
-        for module in board?.modules ?? [] {
+        for module in board?.modules ?? [] where module.isCustom {
             guard let js = modules[module.id] else { continue }
             moduleScripts += """
             <script type="module">
@@ -157,6 +163,8 @@ enum PageHTML {
         <style>\(styles)
         :root { --topic: \(accent); --topic-soft: \(mix(accent, with: (255, 255, 255), 0.88)); --topic-light: \(mix(accent, with: (255, 255, 255), 0.45)); }</style>
         <script>\(sdk.scriptSafe)</script>
+        <script>\(spriteScript.scriptSafe)</script>
+        <script>\(cardsScript.scriptSafe)</script>
         \(head)
         </head><body><div id="root"></div>
         \(body)

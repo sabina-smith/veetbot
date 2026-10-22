@@ -27,13 +27,13 @@ enum DebugSnapshots {
                 try? await Task.sleep(for: .seconds(index == 0 ? 4 : interval))
                 index += 1
                 if let window = NSApp.windows.first(where: { $0.isVisible && $0.contentView != nil }) {
-                    await write(window: window, to: URL(fileURLWithPath: directory).appendingPathComponent(String(format: "window-%03d.png", index)))
+                    await write(window: window, index: index, to: URL(fileURLWithPath: directory).appendingPathComponent(String(format: "window-%03d.png", index)))
                 }
             }
         }
     }
 
-    private static func write(window: NSWindow, to url: URL) async {
+    private static func write(window: NSWindow, index: Int, to url: URL) async {
         guard let content = window.contentView,
             let rep = content.bitmapImageRepForCachingDisplay(in: content.bounds)
         else { return }
@@ -41,6 +41,10 @@ enum DebugSnapshots {
         let image = NSImage(size: content.bounds.size)
         image.addRepresentation(rep)
         for webView in webViews(in: content) where !webView.isHiddenOrHasHiddenAncestor {
+            if index == 1, let script = UserDefaults.standard.string(forKey: "debugScript") {
+                _ = try? await webView.evaluateJavaScript(script)
+                try? await Task.sleep(for: .milliseconds(600))
+            }
             // Animations don't advance while the window is hidden behind others.
             _ = try? await webView.evaluateJavaScript("document.getElementById('tp-debug-still') || document.head.append(Object.assign(document.createElement('style'), { id: 'tp-debug-still', textContent: '*, *::before, *::after { animation: none !important; }' }))")
             guard let shot = try? await webView.takeSnapshot(configuration: nil) else { continue }
