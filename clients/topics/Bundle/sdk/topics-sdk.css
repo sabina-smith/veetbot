@@ -224,3 +224,25 @@ input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--ink); bo
   .tp-title { font-size: 56px; }
   .tp-page { padding: 32px 20px 180px; }
 }
+
+/* pixel helper on the ask bar */
+@keyframes px-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+@keyframes px-busy { 0%, 100% { transform: translateY(0); } 25% { transform: translateY(-4px); } 50% { transform: translateY(0); } 75% { transform: translateY(-2px); } }
+@keyframes px-blink { 0%, 94%, 100% { opacity: 1; } 96% { opacity: 0; } }
+@keyframes px-hop { 0% { transform: translateY(0); } 30% { transform: translateY(-10px); } 60% { transform: translateY(0); } 80% { transform: translateY(-3px); } 100% { transform: translateY(0); } }
+@keyframes px-pop { from { opacity: 0; transform: translateY(4px) scale(0.96); } to { opacity: 1; transform: none; } }
+.px-helper { position: absolute; right: 18px; bottom: 54px; display: flex; align-items: flex-end; gap: 6px; z-index: 2; pointer-events: auto; }
+.px-body { cursor: pointer; padding: 0; animation: px-bob 2.4s steps(2, jump-none) infinite; image-rendering: pixelated; filter: drop-shadow(0 2px 0 rgba(15,15,14,0.15)); }
+.px-helper.busy .px-body { animation: px-busy 0.9s steps(4, jump-none) infinite; }
+.px-helper.hop .px-body { animation: px-hop 0.7s steps(5, jump-none) 1; }
+.px-sprite { display: block; }
+.px-eyes { animation: px-blink 4.2s steps(1) infinite; }
+.px-bubble { position: relative; max-width: 260px; margin-bottom: 30px; background: #fff; color: var(--ink); border: 2px solid var(--ink); padding: 7px 10px; font-size: 12.5px; line-height: 1.35; box-shadow: 3px 3px 0 var(--ink); animation: px-pop 0.18s steps(3, jump-none) both; }
+.px-bubble::after { content: ""; position: absolute; right: -8px; bottom: 8px; width: 8px; height: 8px; background: #fff; border-right: 2px solid var(--ink); border-bottom: 2px solid var(--ink); transform: skewY(-45deg); transform-origin: 0 0; }
+.px-bubble.attention { background: var(--attention); }
+.px-bubble.attention::after { background: var(--attention); }
+.px-bubble button { font-weight: 650; text-decoration: underline; text-underline-offset: 2px; }
+.px-name { position: absolute; right: 0; bottom: -2px; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--topic); background: #fff; padding: 0 3px; }
+.tp-dock-inner { position: relative; }
+.tp-ask { padding-right: 80px; }
+.tp-thread { margin-right: 84px; }

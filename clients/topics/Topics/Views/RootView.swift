@@ -105,7 +105,18 @@ struct TopicRail: View {
             }
             .padding(.top, 12)
             Spacer()
-            Text("Each topic has its own helper. Only time is shared.")
+            if let problem = app.syncProblem {
+                Button {
+                    Task { await app.syncWithServer() }
+                } label: {
+                    Text(problem + " Click to retry.")
+                        .font(.system(size: 11.5)).foregroundStyle(Color(hex: "#C2410C"))
+                        .multilineTextAlignment(.leading)
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 16).padding(.bottom, 10)
+            }
+            Text("Each topic has its own helper. Everything is shared.")
                 .font(.system(size: 12)).foregroundStyle(Ink.faint)
                 .padding(.horizontal, 16).padding(.bottom, 20)
         }
@@ -133,6 +144,7 @@ struct TopicRail: View {
 private struct TopicRailRow: View {
     @EnvironmentObject private var app: AppModel
     let topic: Topic
+    @State private var renaming: String?
     @ObservedObject var agent: TopicAgent
     @ObservedObject var board: BoardModel
 
@@ -150,10 +162,7 @@ private struct TopicRailRow: View {
         } label: {
             HStack(spacing: 12) {
                 Rectangle().fill(Color(hex: topic.accentHex)).frame(width: 10, height: 10)
-                HStack(spacing: 6) {
-                    Text(topic.name).font(.system(size: 15, weight: .medium))
-                    if topic.sealed { Image(systemName: "lock").font(.system(size: 11)) }
-                }
+                Text(topic.name).font(.system(size: 15, weight: .medium)).lineLimit(1)
                 Spacer(minLength: 4)
                 if agent.isWorking {
                     PulsingText(text: topic.agentName, color: Color(hex: topic.accentHex))
@@ -175,6 +184,17 @@ private struct TopicRailRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            Button("Rename…") { renaming = topic.name }
+        }
+        .alert("Rename \(topic.name)", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
+            TextField("Name", text: Binding(get: { renaming ?? "" }, set: { renaming = $0 }))
+            Button("Rename") {
+                let name = renaming ?? ""
+                Task { await app.rename(topic.id, to: name) }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
         .help(agent.isWorking ? "\(topic.agentName) is working" : board.proposals.isEmpty ? topic.name : "\(board.proposals.count) waiting on you")
     }
 }

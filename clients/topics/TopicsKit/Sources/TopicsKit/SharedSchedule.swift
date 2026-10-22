@@ -4,7 +4,7 @@ import Foundation
 public enum ScheduleVisibility: String, Codable, Sendable {
     /// Others see the shared label.
     case labeled
-    /// Others see only that the time is taken.
+    /// Others see only that the time is taken (the owner's choice).
     case busy
     /// Others do not see it at all.
     case hidden
@@ -46,7 +46,7 @@ public struct ScheduleRecord: Codable, Hashable, Identifiable, Sendable {
 /// the entry.
 public struct ScheduleEntry: Codable, Hashable, Identifiable, Sendable {
     public let id: UUID
-    /// Nil when the owner must not be revealed (a sealed topic's entry).
+    /// Nil only for an entry its owner chose to show as just "Busy".
     public let topicID: String?
     public let kind: ScheduleKind
     public let start: Date
@@ -64,8 +64,8 @@ public enum ScheduleViewer: Sendable {
 }
 
 /// The cross-topic plane: time blocks, tasks and reminders, persisted as one
-/// JSON file. Walls are enforced here, in code: on the way in for sealed
-/// topics, and again on the way out for every viewer.
+/// JSON file. Every topic sees every entry by its label; only the owning
+/// topic gets the pointer back into its own records.
 public final class SharedSchedule: @unchecked Sendable {
     public static let busyLabel = "Busy"
 
@@ -85,16 +85,11 @@ public final class SharedSchedule: @unchecked Sendable {
         }
     }
 
-    /// Adds `record` on behalf of `owner`. A sealed owner's entry is stored
-    /// already neutralized, so nothing it writes can leak later.
+    /// Adds `record` on behalf of `owner`.
     @discardableResult
     public func add(_ record: ScheduleRecord, owner: Topic) throws -> ScheduleRecord {
         var stored = record
         stored.topicID = owner.id
-        if owner.sealed {
-            stored.visibility = .busy
-            stored.sharedLabel = Self.busyLabel
-        }
         lock.lock()
         records.append(stored)
         let snapshot = records
@@ -113,7 +108,7 @@ public final class SharedSchedule: @unchecked Sendable {
     }
 
     /// Entries overlapping `[from, to)`, redacted for `viewer`.
-    /// `topics` supplies display names and the sealed flag.
+    /// `topics` supplies display names.
     public func entries(
         for viewer: ScheduleViewer, topics: [Topic], from: Date, to: Date
     ) -> [ScheduleEntry] {
@@ -138,10 +133,7 @@ public final class SharedSchedule: @unchecked Sendable {
                 isOwn: true
             )
         }
-        // An unknown owner is treated as sealed: fail closed.
-        let sealed = owner?.sealed ?? true
-        let visibility: ScheduleVisibility = sealed ? .busy : record.visibility
-        switch visibility {
+        switch record.visibility {
         case .hidden:
             return nil
         case .busy:

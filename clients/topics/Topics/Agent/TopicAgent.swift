@@ -14,7 +14,9 @@ final class TopicAgent: ObservableObject {
         let error: String?
     }
 
-    let topic: Topic
+    private let initialTopic: Topic
+    /// Follows renames.
+    var topic: Topic { app.topic(initialTopic.id) ?? initialTopic }
     unowned let board: BoardModel
     unowned let app: AppModel
     let reducer = RunStateReducer()
@@ -37,13 +39,13 @@ final class TopicAgent: ObservableObject {
     private var currentKind: Kind = .chat
     private var stopRequested = false
 
-    private var sessionKey: String { "topics.session.\(topic.id)" }
-    private var checkInKey: String { "topics.lastCheckIn.\(topic.id)" }
-    private var outcomesKey: String { "topics.outcomes.\(topic.id)" }
-    private var handledRunsKey: String { "topics.handledRuns.\(topic.id)" }
+    private var sessionKey: String { "topics.session.\(initialTopic.id)" }
+    private var checkInKey: String { "topics.lastCheckIn.\(initialTopic.id)" }
+    private var outcomesKey: String { "topics.outcomes.\(initialTopic.id)" }
+    private var handledRunsKey: String { "topics.handledRuns.\(initialTopic.id)" }
 
     init(topic: Topic, board: BoardModel, app: AppModel) {
-        self.topic = topic
+        self.initialTopic = topic
         self.board = board
         self.app = app
         let defaults = UserDefaults.standard
@@ -248,10 +250,10 @@ final class TopicAgent: ObservableObject {
             }
         case .failed?:
             lastError = failure?.message ?? reducer.failure?.message ?? "\(topic.agentName) ran into a problem."
-            board.showToast("\(topic.agentName) ran into a problem and stopped.")
+            board.showToast("I ran into a problem and stopped. Try asking again?", fromHelper: true)
         case .cancelled?:
             if !stopRequested { lastError = "\(topic.agentName) stopped before finishing." }
-            board.showToast(stopRequested ? "Stopped. Nothing on the board changed." : "\(topic.agentName) stopped before finishing.")
+            board.showToast(stopRequested ? "Stopped. Nothing on the board changed." : "I stopped before finishing.", fromHelper: true)
         default:
             lastError = "\(topic.agentName) is taking a long time. The answer will show up when it's ready."
         }
@@ -288,10 +290,13 @@ final class TopicAgent: ObservableObject {
         approvals = fetched
     }
 
+    /// The topic's Veetbot session, bound to the topic on the server so the
+    /// helper's memory and chats belong to it.
     private func ensureSession(_ client: VeetbotAPIClient) async throws -> UUID {
         if let sessionID { return sessionID }
-        let session = try await client.createSession(
-            metadata: ["topics.topic_id": .string(topic.id), "topics.agent": .string(topic.agentName)]
+        await app.serverSync?.value
+        let session = try await TopicsAPI(client: client).createSession(
+            topicID: topic.id, metadata: ["topics.agent": topic.agentName]
         )
         sessionID = session.id
         UserDefaults.standard.set(session.id.uuidString, forKey: sessionKey)
@@ -302,9 +307,15 @@ final class TopicAgent: ObservableObject {
         guard let sessionID else { return }
         do {
             let client = try app.connection.client()
+            let session = try await TopicsAPI(client: client).session(sessionID)
+            // Sessions from before topics existed on the server aren't bound
+            // to this topic; start a bound one. The helper's notes carry on.
+            guard session.topicID == topic.id else {
+                startNewConversation()
+                return
+            }
             let messages = await allMessages(client: client)
             reducer.restore(messages: messages)
-            let session = try await client.getSession(sessionID)
             // A run still going (the app was quit mid-run) is followed and
             // its reply applied when it finishes.
             if let active = session.activeRunID {

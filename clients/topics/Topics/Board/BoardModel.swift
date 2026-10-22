@@ -22,10 +22,15 @@ final class BoardModel: ObservableObject {
 
     /// The agent's latest change, shown on the cards it touched.
     private(set) var recentChange: (modules: [String], commit: String?, summary: String, date: Date, added: Bool)?
-    private var pendingToast: (id: String, text: String, commit: String?)?
+    private var pendingToast: (id: String, text: String, commit: String?, fromHelper: Bool)?
     private var pendingOpenProposal: Int64?
 
-    var topic: Topic { workspace.topic }
+    /// Follows renames.
+    var topic: Topic { app.topic(workspace.topic.id) ?? workspace.topic }
+    /// Where server suggestions will come from. Veetbot's per-topic
+    /// suggestions API (instructions, schedule and reminder suggestions with
+    /// accept/dismiss) isn't wired yet; the page already has a place for them.
+    var suggestions: [[String: Any]] { [] }
     private weak var page: WKWebView?
     private var cancellables: Set<AnyCancellable> = []
 
@@ -79,11 +84,15 @@ final class BoardModel: ObservableObject {
     func pushState() {
         guard let page, let agent = app.agents[topic.id] else { return }
         var state: [String: Any] = [
-            "helper": ["working": agent.isWorking, "stopping": agent.isStopping, "doing": agent.doing],
+            "helper": [
+                "working": agent.isWorking, "stopping": agent.isStopping, "doing": agent.doing,
+                "thinking": agent.reducer.reasoningTitle ?? NSNull(),
+            ] as [String: Any],
             "proposals": proposals.map(Self.json),
             "dueToday": dueToday().map { ["label": $0] },
             "thread": agent.thread.map { ["from": $0.fromOwner ? "you" : "helper", "text": $0.text] },
             "recent": NSNull(),
+            "suggestions": suggestions,
         ]
         if let recent = recentChange, Date().timeIntervalSince(recent.date) < 15 * 60 {
             state["recent"] = [
@@ -92,7 +101,7 @@ final class BoardModel: ObservableObject {
             ] as [String: Any]
         }
         if let toast = pendingToast {
-            state["toast"] = ["id": toast.id, "text": toast.text, "commit": toast.commit ?? NSNull()] as [String: Any]
+            state["toast"] = ["id": toast.id, "text": toast.text, "commit": toast.commit ?? NSNull(), "fromHelper": toast.fromHelper] as [String: Any]
         }
         if let id = pendingOpenProposal {
             state["openProposal"] = id
@@ -101,8 +110,9 @@ final class BoardModel: ObservableObject {
         page.evaluateJavaScript("window.__topicsState && window.__topicsState(\(PageHTML.json(state)))")
     }
 
-    func showToast(_ text: String, commit: String? = nil) {
-        pendingToast = (UUID().uuidString, text, commit)
+    /// `fromHelper` shows it in the helper's speech bubble instead of a toast.
+    func showToast(_ text: String, commit: String? = nil, fromHelper: Bool = false) {
+        pendingToast = (UUID().uuidString, text, commit, fromHelper)
         pushState()
     }
 
@@ -129,7 +139,7 @@ final class BoardModel: ObservableObject {
         let added = modules.subtracting(previousModules)
         touched.formUnion(added)
         recentChange = (Array(touched.intersection(modules)), applied.commit, applied.summary, Date(), !added.isEmpty)
-        showToast(applied.summary, commit: applied.commit)
+        showToast(applied.summary, commit: applied.commit, fromHelper: true)
     }
 
     func recordModuleError(_ moduleID: String, _ message: String) {
@@ -270,6 +280,9 @@ final class BoardModel: ObservableObject {
         case "toast":
             showToast(args["text"] as? String ?? "")
             return nil
+        case "suggestion.accept", "suggestion.dismiss":
+            // Placeholder until Veetbot's suggestions API lands.
+            throw BridgeError("Suggestions aren't available yet.")
         case "log":
             recordModuleError(args["module"] as? String ?? "board", args["message"] as? String ?? "unknown error")
             return nil

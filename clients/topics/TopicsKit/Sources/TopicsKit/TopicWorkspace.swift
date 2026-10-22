@@ -68,6 +68,7 @@ public final class TopicWorkspace: @unchecked Sendable {
         }
         database = try TopicDatabase(path: root.appendingPathComponent("data.sqlite").path)
         try ProposalStore.ensureSchema(database)
+        try database.execScript(CardKinds.schema)
         if isNew {
             for script in ["schema.sql", "seed.sql"] {
                 let url = root.appendingPathComponent(script)

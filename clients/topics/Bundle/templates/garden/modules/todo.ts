@@ -32,7 +32,7 @@ export default async function render(root: HTMLElement, t: Topics): Promise<void
       }),
       ui.stack([
         ui.el("span", { style: { fontSize: "14.5px", lineHeight: "1.35", textDecoration: done ? "line-through" : "none", color: done ? "var(--faint)" : "inherit" } }, task.title),
-        task.agent_note && !done ? ui.text(task.agent_note, { small: true, muted: true }) : null,
+        task.agent_note && !done ? ui.text(task.agent_note, { small: true, muted: true, clamp: true }) : null,
         p ? ui.row([ui.needsButton(p.kind === "question" ? `${helper} has a question` : `${helper} needs you`, () => t.proposals.open(p.id))]) : null,
         ui.row([
           ui.el("span", { style: { fontSize: "12.5px", fontWeight: late ? "650" : "400", color: late ? "var(--attention-text)" : "var(--muted)" } }, due(task)),
