@@ -18,7 +18,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var topics: [Topic] = []
     @Published private(set) var boards: [String: BoardModel] = [:]
     @Published private(set) var agents: [String: TopicAgent] = [:]
-    @Published var screen: Screen = .topic(Topic.garden.id)
+    @Published var screen: Screen = .home
     @Published var startupError: String?
     /// Nil once the topic list matches Veetbot's; otherwise why it doesn't.
     @Published private(set) var syncProblem: String?
@@ -43,10 +43,10 @@ final class AppModel: ObservableObject {
         schedule = SharedSchedule(fileURL: Self.dataRoot.appendingPathComponent("shared/schedule.json"))
         topicStore = TopicStore(fileURL: Self.dataRoot.appendingPathComponent("topics.json"))
         topics = topicStore.topics
+        if topics.isEmpty { screen = .newTopic }
         do {
             builder = try ModuleBuilder()
             for topic in topics { try open(topic) }
-            seedScheduleIfEmpty()
         } catch {
             startupError = error.localizedDescription
         }
@@ -220,33 +220,5 @@ final class AppModel: ObservableObject {
             break
         }
         return nil
-    }
-
-    /// A few labelled time blocks so Home's week isn't empty on first run.
-    private func seedScheduleIfEmpty() {
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
-        let existing = schedule.entries(for: .home, topics: topics, from: today.addingTimeInterval(-30 * 86_400), to: today.addingTimeInterval(60 * 86_400))
-        guard existing.count < 3 else { return }
-        func at(_ day: Int, _ hour: Double) -> Date { today.addingTimeInterval(Double(day) * 86_400 + hour * 3600) }
-        let samples: [(String, ScheduleKind, Int, Double, Double, String)] = [
-            ("work", .block, 0, 9, 2, "Board prep"),
-            ("garden", .task, 0, 17, 1, "Turn the compost pile"),
-            ("health", .block, 1, 8, 1.5, "Appointment"),
-            ("work", .block, 1, 13, 2, "Portfolio review"),
-            ("household", .reminder, 1, 19, 1, "Recycling out"),
-            ("work", .task, 2, 12, 1, "Send Q3 memo"),
-            ("household", .block, 2, 14, 2, "Plumber window"),
-            ("garden", .block, 3, 10, 2, "Plant garlic"),
-            ("household", .block, 3, 13, 1.5, "Farmers market"),
-            ("health", .block, 4, 16, 1, "Appointment"),
-        ]
-        for (id, kind, day, hour, length, label) in samples {
-            guard let owner = topic(id) else { continue }
-            _ = try? schedule.add(
-                ScheduleRecord(topicID: owner.id, kind: kind, start: at(day, hour), end: at(day, hour + length), sharedLabel: label),
-                owner: owner
-            )
-        }
     }
 }
