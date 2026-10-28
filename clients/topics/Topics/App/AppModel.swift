@@ -10,15 +10,17 @@ final class AppModel: ObservableObject {
         case home
         case topic(String)
         case newTopic
+        case onboarding
     }
 
     let connection = VeetbotConnection()
+    private(set) lazy var onboarding = OnboardingModel(connection: connection)
     let schedule: SharedSchedule
     let topicStore: TopicStore
     @Published private(set) var topics: [Topic] = []
     @Published private(set) var boards: [String: BoardModel] = [:]
     @Published private(set) var agents: [String: TopicAgent] = [:]
-    @Published var screen: Screen = .topic(Topic.garden.id)
+    @Published var screen: Screen = .home
     @Published var startupError: String?
     /// Nil once the topic list matches Veetbot's; otherwise why it doesn't.
     @Published private(set) var syncProblem: String?
@@ -43,10 +45,10 @@ final class AppModel: ObservableObject {
         schedule = SharedSchedule(fileURL: Self.dataRoot.appendingPathComponent("shared/schedule.json"))
         topicStore = TopicStore(fileURL: Self.dataRoot.appendingPathComponent("topics.json"))
         topics = topicStore.topics
+        if topics.isEmpty { screen = .onboarding }
         do {
             builder = try ModuleBuilder()
             for topic in topics { try open(topic) }
-            seedScheduleIfEmpty()
         } catch {
             startupError = error.localizedDescription
         }
@@ -69,8 +71,8 @@ final class AppModel: ObservableObject {
                 UserDefaults.standard.set(true, forKey: Self.migratedKey)
             }
             try topicStore.reconcile(with: server.map { (id: $0.id, name: $0.name) })
+            for topic in topicStore.topics where boards[topic.id] == nil { try open(topic) }
             topics = topicStore.topics
-            for topic in topics where boards[topic.id] == nil { try open(topic) }
             let current = Set(topics.map(\.id))
             for id in Array(boards.keys) where !current.contains(id) {
                 boards[id] = nil
@@ -113,24 +115,29 @@ final class AppModel: ObservableObject {
 
     // MARK: New topic
 
-    func createTopic(name: String, colour: String, helper: String, answers: [(q: String, a: String)]) async throws {
+    func createTopic(
+        name: String, colour: String, helper: String, answers: [(q: String, a: String)],
+        instructions: String = "", show: Bool = true
+    ) async throws {
         await serverSync?.value
         let api = try api()
         let taken = Set(try await api.list().map(\.id))
         let draft = topicStore.draft(name: name, accentHex: colour, agentName: helper, taken: taken)
-        let created = try await api.create(id: draft.id, name: draft.name)
+        let created = try await api.create(id: draft.id, name: draft.name, instructions: instructions)
         var topic = draft
         topic.name = created.name
         try topicStore.add(topic)
-        topics = topicStore.topics
+        // Open before publishing: the rail expects a board for every topic,
+        // and opening waits on git, which lets SwiftUI redraw.
         try open(topic)
+        topics = topicStore.topics
         // The starter board is on screen at once; the helper tidies it after.
         if let board = boards[topic.id] {
             let answer = { (i: Int) in answers.indices.contains(i) ? answers[i].a : "" }
             try StarterBoard.apply(to: board.workspace, answers: .init(about: answer(0), onYourMind: answer(1), helpers: answer(2)))
             board.reload()
         }
-        screen = .topic(topic.id)
+        if show { screen = .topic(topic.id) }
         let told = answers.filter { !$0.a.isEmpty }.map { "\($0.q)\n\($0.a)" }.joined(separator: "\n\n")
         agents[topic.id]?.checkIn(
             reason: "You set up \(topic.name)",
@@ -197,7 +204,32 @@ final class AppModel: ObservableObject {
         return label[label.index(after: colon)...].trimmingCharacters(in: .whitespaces)
     }
 
-    /// Calls from the Home and New topic pages.
+    private static func answers(_ value: Any?) -> [(q: String, a: String)] {
+        (value as? [[String: Any]] ?? []).map { (q: $0["q"] as? String ?? "", a: $0["a"] as? String ?? "") }
+    }
+
+    /// Creates the topics the owner kept from onboarding, each seeded with
+    /// what the scan found, and opens the first.
+    private func createFromOnboarding(_ chosen: [[String: Any]]) async throws {
+        var first: String?
+        for pick in chosen {
+            guard let source = pick["source"] as? String, let proposal = onboarding.proposal(named: source) else { continue }
+            let name = (pick["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? proposal.name
+            try await createTopic(
+                name: name, colour: pick["colour"] as? String ?? "#0E7C86", helper: pick["helper"] as? String ?? "Wren",
+                answers: [
+                    (q: "What's \(name) about?", a: [proposal.about, proposal.why].filter { !$0.isEmpty }.joined(separator: " ")),
+                    (q: "What do you want off your mind?", a: proposal.onYourMind.joined(separator: ", ")),
+                    (q: "Anyone who helps with it?", a: proposal.people.joined(separator: ", ")),
+                ],
+                instructions: proposal.instructions, show: false
+            )
+            first = first ?? topics.last?.id
+        }
+        if let first { screen = .topic(first) }
+    }
+
+    /// Calls from the Home, New topic and onboarding pages.
     func handleHome(op: String, args: [String: Any]) async throws -> Any? {
         let topicID = args["topicId"] as? String ?? ""
         let proposalID = (args["id"] as? NSNumber)?.int64Value
@@ -210,8 +242,18 @@ final class AppModel: ObservableObject {
             if let proposalID { boards[topicID]?.openProposalWhenShown(proposalID) }
         case "home.openTopic":
             screen = .topic(topicID)
+        case "onboarding.start":
+            onboarding.start()
+        case "onboarding.status":
+            return onboarding.status()
+        case "onboarding.answer":
+            onboarding.answer(Self.answers(args["answers"]))
+        case "onboarding.skip":
+            screen = .newTopic
+        case "onboarding.create":
+            try await createFromOnboarding(args["topics"] as? [[String: Any]] ?? [])
         case "newtopic.create":
-            let answers = (args["answers"] as? [[String: Any]] ?? []).map { (q: $0["q"] as? String ?? "", a: $0["a"] as? String ?? "") }
+            let answers = Self.answers(args["answers"])
             try await createTopic(
                 name: args["name"] as? String ?? "New topic", colour: args["colour"] as? String ?? "#0E7C86",
                 helper: args["helper"] as? String ?? "Wren", answers: answers
@@ -220,33 +262,5 @@ final class AppModel: ObservableObject {
             break
         }
         return nil
-    }
-
-    /// A few labelled time blocks so Home's week isn't empty on first run.
-    private func seedScheduleIfEmpty() {
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
-        let existing = schedule.entries(for: .home, topics: topics, from: today.addingTimeInterval(-30 * 86_400), to: today.addingTimeInterval(60 * 86_400))
-        guard existing.count < 3 else { return }
-        func at(_ day: Int, _ hour: Double) -> Date { today.addingTimeInterval(Double(day) * 86_400 + hour * 3600) }
-        let samples: [(String, ScheduleKind, Int, Double, Double, String)] = [
-            ("work", .block, 0, 9, 2, "Board prep"),
-            ("garden", .task, 0, 17, 1, "Turn the compost pile"),
-            ("health", .block, 1, 8, 1.5, "Appointment"),
-            ("work", .block, 1, 13, 2, "Portfolio review"),
-            ("household", .reminder, 1, 19, 1, "Recycling out"),
-            ("work", .task, 2, 12, 1, "Send Q3 memo"),
-            ("household", .block, 2, 14, 2, "Plumber window"),
-            ("garden", .block, 3, 10, 2, "Plant garlic"),
-            ("household", .block, 3, 13, 1.5, "Farmers market"),
-            ("health", .block, 4, 16, 1, "Appointment"),
-        ]
-        for (id, kind, day, hour, length, label) in samples {
-            guard let owner = topic(id) else { continue }
-            _ = try? schedule.add(
-                ScheduleRecord(topicID: owner.id, kind: kind, start: at(day, hour), end: at(day, hour + length), sharedLabel: label),
-                owner: owner
-            )
-        }
     }
 }

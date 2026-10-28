@@ -107,6 +107,7 @@ enum PageHTML {
     static let cardsScript = resource("sdk/cards.js")
     static let homeScript = resource("sdk/home.js")
     static let newTopicScript = resource("sdk/newtopic.js")
+    static let onboardingScript = resource("sdk/onboarding.js")
 
     private static func resource(_ path: String) -> String {
         guard let url = AppModel.bundledResources?.appendingPathComponent(path) else { return "" }
@@ -153,6 +154,10 @@ enum PageHTML {
 
     static func newTopic(existingHelpers: [String]) -> String {
         page(accent: "#0E7C86", head: "<script>window.__existingHelpers = \(json(existingHelpers));</script>", body: "<script>\(newTopicScript.scriptSafe)</script>")
+    }
+
+    static func onboarding() -> String {
+        page(accent: "#0E7C86", head: "", body: "<script>\(onboardingScript.scriptSafe)</script>")
     }
 
     private static func page(accent: String, head: String, body: String) -> String {

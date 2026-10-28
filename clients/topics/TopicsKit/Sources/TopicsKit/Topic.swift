@@ -52,8 +52,6 @@ extension Topic {
         id: "health", name: "Health", icon: "heart", accentHex: "#0F0F0E", agentName: "Sage",
         template: "blank"
     )
-
-    public static let defaults: [Topic] = [.garden, .household, .work, .health]
 }
 
 /// What the app knows about each topic beyond the server's id and name:
@@ -69,13 +67,13 @@ public final class TopicStore: @unchecked Sendable {
 
     public init(fileURL: URL?) {
         self.fileURL = fileURL
+        // A first run starts with no topics; the person sets them up.
         if let fileURL, let data = try? Data(contentsOf: fileURL),
-            let saved = try? JSONDecoder().decode([Topic].self, from: data), !saved.isEmpty
+            let saved = try? JSONDecoder().decode([Topic].self, from: data)
         {
             topics = saved
         } else {
-            topics = Topic.defaults
-            try? persist()
+            topics = []
         }
     }
 

@@ -37,6 +37,10 @@ struct RootView: View {
                 PageWebView(html: PageHTML.newTopic(existingHelpers: app.topics.map(\.agentName))) { op, args in
                     try await app.handleHome(op: op, args: args)
                 }
+            case .onboarding:
+                PageWebView(html: PageHTML.onboarding()) { op, args in
+                    try await app.handleHome(op: op, args: args)
+                }
             case .topic(let id):
                 if let board = app.boards[id], let agent = app.agents[id] {
                     BoardScreen(board: board, agent: agent).id(id)
@@ -95,7 +99,9 @@ struct TopicRail: View {
                 .foregroundStyle(Ink.faint)
                 .padding(.leading, 16).padding(.top, 28).padding(.bottom, 8)
             ForEach(app.topics) { topic in
-                TopicRailRow(topic: topic, agent: app.agents[topic.id], board: app.boards[topic.id])
+                if let agent = app.agents[topic.id], let board = app.boards[topic.id] {
+                    TopicRailRow(topic: topic, agent: agent, board: board)
+                }
             }
             row(selected: app.screen == .newTopic, action: { app.screen = .newTopic }) {
                 HStack(spacing: 12) {
@@ -148,11 +154,10 @@ private struct TopicRailRow: View {
     @ObservedObject var agent: TopicAgent
     @ObservedObject var board: BoardModel
 
-    init(topic: Topic, agent: TopicAgent?, board: BoardModel?) {
+    init(topic: Topic, agent: TopicAgent, board: BoardModel) {
         self.topic = topic
-        // Every topic has both once the app has started.
-        self.agent = agent!
-        self.board = board!
+        self.agent = agent
+        self.board = board
     }
 
     var body: some View {

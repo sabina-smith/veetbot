@@ -35,10 +35,10 @@ struct TopicsAPI {
         return page.items
     }
 
-    func create(id: String, name: String) async throws -> ServerTopic {
+    func create(id: String, name: String, instructions: String = "") async throws -> ServerTopic {
         try await client.transport.send(TransportRequest(
             method: .post, path: "/v1/topics",
-            body: try JSONSerialization.data(withJSONObject: ["id": id, "name": name])
+            body: try JSONSerialization.data(withJSONObject: ["id": id, "name": name, "instructions": instructions])
         ))
     }
 
@@ -50,13 +50,13 @@ struct TopicsAPI {
         ))
     }
 
-    /// Creates a session bound to `topicID`.
-    func createSession(topicID: String, metadata: [String: String]) async throws -> SessionBinding {
-        try await client.transport.send(TransportRequest(
+    /// Creates a session bound to `topicID`, or to no topic (core) when nil.
+    func createSession(topicID: String?, metadata: [String: String]) async throws -> SessionBinding {
+        var body: [String: Any] = ["agent_id": "general", "metadata": metadata]
+        if let topicID { body["topic_id"] = topicID }
+        return try await client.transport.send(TransportRequest(
             method: .post, path: "/v1/sessions",
-            body: try JSONSerialization.data(withJSONObject: [
-                "agent_id": "general", "topic_id": topicID, "metadata": metadata,
-            ])
+            body: try JSONSerialization.data(withJSONObject: body)
         ))
     }
 

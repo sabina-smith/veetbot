@@ -3,9 +3,8 @@ import XCTest
 @testable import TopicsKit
 
 final class TopicStoreTests: XCTestCase {
-    func testSeedsTheDefaultTopics() {
-        let store = TopicStore(fileURL: nil)
-        XCTAssertEqual(store.topics.map(\.id), ["garden", "household", "work", "health"])
+    func testStartsWithNoTopics() {
+        XCTAssertEqual(TopicStore(fileURL: nil).topics, [])
     }
 
     func testDraftsAUniqueSlug() throws {
@@ -22,6 +21,7 @@ final class TopicStoreTests: XCTestCase {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("topics-\(UUID()).json")
         defer { try? FileManager.default.removeItem(at: url) }
         let store = TopicStore(fileURL: url)
+        try store.add(.garden)
         try store.reconcile(with: [(id: "pets", name: "Pets"), (id: "garden", name: "The Garden")])
         XCTAssertEqual(store.topics.map(\.id), ["garden", "pets"])
         XCTAssertEqual(store.topics[0].name, "The Garden")

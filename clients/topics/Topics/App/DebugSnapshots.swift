@@ -11,12 +11,30 @@ enum DebugSnapshots {
     static func startIfRequested(app: AppModel) {
         let defaults = UserDefaults.standard
         if let screen = defaults.string(forKey: "screen") {
-            app.screen = screen == "home" ? .home : screen == "new" ? .newTopic : .topic(screen)
+            app.screen = screen == "home" ? .home : screen == "new" ? .newTopic : screen == "onboarding" ? .onboarding : .topic(screen)
         }
         if defaults.bool(forKey: "autoCheckIn"), case .topic(let id) = app.screen {
             Task {
                 try? await Task.sleep(for: .seconds(3))
                 app.agents[id]?.checkIn()
+            }
+        }
+        // `-onboardingAutoplay YES` runs onboarding with sample answers;
+        // `-onboardingAutoCreate YES` also keeps the first proposed topic.
+        if defaults.bool(forKey: "onboardingAutoplay"), app.screen == .onboarding {
+            app.onboarding.start()
+            app.onboarding.answer([
+                (q: "What do you do for work?", a: "Investor at a venture firm"),
+                (q: "What would you most like off your plate?", a: "Founder follow-ups, home admin"),
+            ])
+            if defaults.bool(forKey: "onboardingAutoCreate") {
+                Task {
+                    while app.onboarding.phase != .proposed { try? await Task.sleep(for: .seconds(2)) }
+                    let first = app.onboarding.core[0].name
+                    _ = try? await app.handleHome(op: "onboarding.create", args: [
+                        "topics": [["source": first, "name": first, "colour": "#0E7C86", "helper": "Wren"]],
+                    ])
+                }
             }
         }
         guard let directory = defaults.string(forKey: "snapshotDir") else { return }
