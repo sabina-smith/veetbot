@@ -4,10 +4,13 @@ import Foundation
 /// edits this file to add, remove or rearrange modules.
 public struct Board: Codable, Hashable, Sendable {
     public var columns: Int
+    /// One sentence on what the topic is, shown under the board's title.
+    public var summary: String?
     public var modules: [BoardModule]
 
-    public init(columns: Int = 12, modules: [BoardModule]) {
+    public init(columns: Int = 12, summary: String? = nil, modules: [BoardModule]) {
         self.columns = columns
+        self.summary = summary
         self.modules = modules
     }
 }
@@ -26,14 +29,20 @@ public struct BoardModule: Codable, Hashable, Identifiable, Sendable {
     public var kind: String?
     /// For `table` cards: the columns to show.
     public var columns: [CardColumn]?
+    /// What the card is for, shown in the board's About panel.
+    public var about: String?
 
-    public init(id: String, title: String, span: Int = 4, height: Int? = nil, kind: String? = nil, columns: [CardColumn]? = nil) {
+    public init(
+        id: String, title: String, span: Int = 4, height: Int? = nil, kind: String? = nil, columns: [CardColumn]? = nil,
+        about: String? = nil
+    ) {
         self.id = id
         self.title = title
         self.span = span
         self.height = height
         self.kind = kind
         self.columns = columns
+        self.about = about
     }
 
     public var isCustom: Bool { kind == nil || kind == "custom" }

@@ -19,7 +19,7 @@
     return t.db.exec(`UPDATE items SET ${keys.map((k) => `${k} = ?`).join(", ")} WHERE id = ?`, [...keys.map((k) => fields[k]), id]);
   };
   const dataOf = (row) => { try { return JSON.parse(row.data || "{}") || {}; } catch { return {}; } };
-  const proposalButton = (t, p) => t.ui.needsButton(
+  const proposalButton = (t, p) => t.proposals.inline(p) ?? t.ui.needsButton(
     p.options.length > 1 ? `${p.options.length} options${(() => { const ps = p.options.map((o) => o.price).filter((x) => typeof x === "number"); return ps.length ? ` from ${t.money(Math.min(...ps))}` : ""; })()}` : p.kind === "question" ? `${t.topic.agentName} has a question` : "Your call",
     () => t.proposals.open(p.id));
 

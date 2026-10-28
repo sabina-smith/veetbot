@@ -1,9 +1,9 @@
 {
   "columns": 12,
+  "summary": "Bills, upkeep, and the errands that keep the house running.",
   "modules": [
-    { "id": "bills", "title": "Bills", "span": 7 },
-    { "id": "upkeep", "title": "Upkeep", "span": 5 },
-    { "id": "errands", "title": "Groceries & errands", "span": 5 },
-    { "id": "people", "title": "People", "span": 7 }
+    { "id": "bills", "title": "Bills", "span": 7, "about": "What's due, what's paid, and what changed." },
+    { "id": "upkeep", "title": "Upkeep", "span": 5, "about": "Maintenance that comes around every few months." },
+    { "id": "errands", "title": "Groceries & errands", "span": 12, "about": "Things to pick up and get done this week." }
   ]
 }

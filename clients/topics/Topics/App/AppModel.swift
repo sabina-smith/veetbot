@@ -17,6 +17,10 @@ final class AppModel: ObservableObject {
     private(set) lazy var onboarding = OnboardingModel(connection: connection)
     let schedule: SharedSchedule
     let topicStore: TopicStore
+    /// How far each booking site has climbed, shared by every topic.
+    let sites: SiteAccessStore?
+    /// The sign-in window on screen, if any.
+    @Published var siteSignIn: SiteSignIn?
     @Published private(set) var topics: [Topic] = []
     @Published private(set) var boards: [String: BoardModel] = [:]
     @Published private(set) var agents: [String: TopicAgent] = [:]
@@ -44,6 +48,7 @@ final class AppModel: ObservableObject {
     init() {
         schedule = SharedSchedule(fileURL: Self.dataRoot.appendingPathComponent("shared/schedule.json"))
         topicStore = TopicStore(fileURL: Self.dataRoot.appendingPathComponent("topics.json"))
+        sites = try? SiteAccessStore(url: Self.dataRoot.appendingPathComponent("shared/sites.json"))
         topics = topicStore.topics
         if topics.isEmpty { screen = .onboarding }
         do {
@@ -56,6 +61,31 @@ final class AppModel: ObservableObject {
     }
 
     func api() throws -> TopicsAPI { TopicsAPI(client: try connection.client()) }
+
+    // MARK: Booking sites
+
+    /// Signs the owner in to the site behind `url` in Veetbot's sign-in
+    /// window. Answers "signed_in", "cancelled", or "unavailable" when this
+    /// Veetbot can't save sign-ins (its browser service isn't set up).
+    func signIn(url: String, name: String) async -> String {
+        guard siteSignIn == nil, let client = try? connection.client(),
+            let signIn = await SiteSignIn.start(url: url, name: name, api: client)
+        else { return SiteSignIn.Outcome.unavailable.rawValue }
+        siteSignIn = signIn
+        let outcome = await signIn.result()
+        siteSignIn = nil
+        if outcome == .signedIn {
+            try? sites?.record(url, level: .signedIn, profileID: signIn.profileID, name: name)
+        }
+        return outcome.rawValue
+    }
+
+    /// The sheet went away some other way than its own buttons.
+    func siteSignInClosed() {
+        guard let open = siteSignIn else { return }
+        siteSignIn = nil
+        Task { await open.close() }
+    }
 
     /// Makes Veetbot the source of truth for the topic list. The first time,
     /// topics that exist only on this Mac are created on the server.
@@ -147,7 +177,8 @@ final class AppModel: ObservableObject {
             \(told)
 
             A starter board is already on screen, built from those answers with ready-made cards: \
-            "On your mind" (list), "About \(topic.name)" (notes), "People" (table) and "Coming up" (schedule). \
+            "On your mind" (list) and "Coming up" (schedule), with what the topic is as the board's summary and \
+            the people who help in notes/people.md. \
             Tidy it quickly: fix rows that were split badly, add a due date or detail where they implied one, \
             and add at most one more ready-made card if it clearly helps. Keep this visit short.
             """

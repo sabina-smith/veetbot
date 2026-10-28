@@ -156,8 +156,29 @@ interface ProposalOption {
   detail?: string;
   url?: string;
   price?: number;
-  /** Column values written to the proposal's row if the owner picks this option. */
+  /** Column values written to the proposal's row if the owner picks this option; `data.<key>` writes into its `data` JSON. */
   set?: Record<string, SQLValue>;
+}
+
+/** Something a question asks for, answered with a picker. */
+interface ProposalField {
+  key: string;
+  label: string;
+  type: "date" | "daterange" | "number" | "pick" | "multi" | "text" | "connect" | "signin";
+  options: string[];
+  other: boolean;
+  min: number | null;
+  max: number | null;
+  step: number | null;
+  unit: string | null;
+  /** The agent's prefilled guess: "YYYY-MM-DD", {start, end}, a number, a string or strings. */
+  value: unknown;
+  hint: string | null;
+  optional: boolean;
+  integration: string | null;
+  /** For signin: the booking link, and the site's name. */
+  url: string | null;
+  name: string | null;
 }
 
 interface Proposal {
@@ -169,6 +190,7 @@ interface Proposal {
   summary: string | null;
   options: ProposalOption[];
   recommended: number | null;
+  fields: ProposalField[];
 }
 
 /**
@@ -182,6 +204,8 @@ interface Proposals {
   list(): Promise<Proposal[]>;
   /** Opens the proposal in the sidebar. */
   open(id: number): Promise<void>;
+  /** Controls to answer a light proposal right on its row (chips, a stepper, a date); null when it needs the sidebar. */
+  inline(p: Proposal): HTMLElement | null;
 }
 
 interface Agent {
