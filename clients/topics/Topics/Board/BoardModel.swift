@@ -93,6 +93,8 @@ final class BoardModel: ObservableObject {
             "thread": agent.thread.map { ["from": $0.fromOwner ? "you" : "helper", "text": $0.text] },
             "recent": NSNull(),
             "suggestions": suggestions,
+            "integrations": ["calendar": CalendarSource.shared.status.rawValue],
+            "sites": Dictionary(uniqueKeysWithValues: (app.sites?.all ?? []).map { ($0.site, $0.level.rawValue) }),
         ]
         if let recent = recentChange, Date().timeIntervalSince(recent.date) < 15 * 60 {
             state["recent"] = [
@@ -173,16 +175,22 @@ final class BoardModel: ObservableObject {
 
     // MARK: Decisions
 
-    func accept(id: Int64, option: Int?, note: String?) {
+    func accept(id: Int64, option: Int?, note: String?, answers: [String: Proposal.Answer] = [:]) {
         guard let proposal = proposals.first(where: { $0.id == id }) else { return }
         do {
-            try ProposalStore.accept(workspace.database, id: id, option: option, note: note)
+            try ProposalStore.accept(workspace.database, id: id, option: option, note: note, answers: answers)
+            // "Book it myself" is the owner's choice for that site until they sign in.
+            for field in proposal.fields where field.type == .signin && answers[field.key] == .text("link") {
+                if let url = field.url { try? app.sites?.record(url, level: .link, name: field.siteName) }
+            }
             dataChanged()
             let choice = option.flatMap { proposal.options.indices.contains($0) ? proposal.options[$0].label : nil }
+            let answered = proposal.fields.compactMap { field in answers[field.key].map { "\(field.label): \($0)" } }
             showToast(proposal.kind == .purchase ? "\(proposal.title): in your cart." : "Sent to \(topic.agentName).")
             app.agents[topic.id]?.checkIn(
                 reason: "You made a decision",
                 focus: "The owner accepted proposal #\(proposal.id) (\(proposal.title))" + (choice.map { ", choosing \"\($0)\"" } ?? "")
+                    + (answered.isEmpty ? "" : ", answering " + answered.joined(separator: "; "))
                     + (note.map { ". Their note: \($0)" } ?? "") + ". Carry on from there."
             )
         } catch {
@@ -252,12 +260,23 @@ final class BoardModel: ObservableObject {
             return proposals.map(Self.json)
         case "proposal.accept":
             if let id = (args["id"] as? NSNumber)?.int64Value {
-                accept(id: id, option: (args["option"] as? NSNumber)?.intValue, note: args["note"] as? String)
+                let answers = (args["answers"] as? [String: Any] ?? [:]).compactMapValues(Proposal.Answer.init(json:))
+                accept(id: id, option: (args["option"] as? NSNumber)?.intValue, note: args["note"] as? String, answers: answers)
             }
             return nil
         case "proposal.decline":
             if let id = (args["id"] as? NSNumber)?.int64Value { decline(id: id, note: args["note"] as? String) }
             return nil
+        case "site.signin":
+            guard let url = args["url"] as? String else { throw BridgeError("site.signin needs a url") }
+            let outcome = await app.signIn(url: url, name: args["name"] as? String ?? SiteAccessStore.site(of: url) ?? "this site")
+            pushState()
+            return outcome
+        case "integration.connect":
+            guard args["name"] as? String == "calendar" else { return "unavailable" }
+            let status = await CalendarSource.shared.connect()
+            pushState()
+            return status.rawValue
         case "ask", "agent.ask":
             agent?.send(args["text"] as? String ?? "")
             return nil
@@ -326,6 +345,15 @@ final class BoardModel: ObservableObject {
             "summary": n(proposal.summary), "recommended": n(proposal.recommended),
             "options": proposal.options.map { option -> [String: Any] in
                 ["label": option.label, "detail": n(option.detail), "url": n(option.url), "price": n(option.price)]
+            },
+            "fields": proposal.fields.map { field -> [String: Any] in
+                [
+                    "key": field.key, "label": field.label, "type": field.type.rawValue, "options": field.options,
+                    "other": field.allowsOther, "min": n(field.min), "max": n(field.max), "step": n(field.step),
+                    "unit": n(field.unit), "value": n(field.value?.jsonValue), "hint": n(field.hint),
+                    "optional": field.optional, "integration": n(field.integration),
+                    "url": n(field.url), "name": n(field.siteName),
+                ]
             },
         ]
     }

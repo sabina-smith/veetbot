@@ -1,9 +1,10 @@
 {
   "columns": 12,
+  "summary": "The beds, what's growing, and what the garden needs next.",
   "modules": [
-    { "id": "garden-map", "title": "Map", "span": 7 },
-    { "id": "shopping", "title": "Shopping", "span": 5 },
-    { "id": "todo", "title": "To do", "span": 4 },
-    { "id": "tool-shed", "title": "Tool shed", "span": 4 }
+    { "id": "garden-map", "title": "Map", "span": 7, "about": "Where everything is planted, bed by bed." },
+    { "id": "shopping", "title": "Shopping", "span": 5, "about": "Seeds, soil and supplies to buy, with options found for you." },
+    { "id": "todo", "title": "To do", "span": 4, "about": "Garden jobs and when they're due." },
+    { "id": "tool-shed", "title": "Tool shed", "span": 4, "about": "The tools you have, so nothing gets bought twice." }
   ]
 }

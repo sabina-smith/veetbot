@@ -121,6 +121,7 @@ enum PageHTML {
                 "id": module.id, "title": module.title, "span": max(1, min(12, module.span * 12 / columns)),
                 "kind": module.kind ?? "custom",
                 "columns": module.columns.map { $0.map { ["key": $0.key, "label": $0.label] } } ?? NSNull(),
+                "about": nullable(module.about),
             ]
         }
         let context: [String: Any] = [
@@ -128,7 +129,7 @@ enum PageHTML {
                 "id": topic.id, "name": topic.name, "subtitle": nullable(topic.subtitle), "accent": topic.accentHex,
                 "agentName": topic.agentName, "suggestion": nullable(topic.suggestion),
             ],
-            "layout": ["modules": layout],
+            "layout": ["modules": layout, "summary": nullable(board?.summary)] as [String: Any],
         ]
         var moduleScripts = ""
         for module in board?.modules ?? [] where module.isCustom {

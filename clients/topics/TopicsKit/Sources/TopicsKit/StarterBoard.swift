@@ -1,8 +1,9 @@
 import Foundation
 
 /// The board a new topic opens with, built at once from the owner's answers
-/// to the helper's first questions, using only ready-made cards. The helper
-/// tidies it up afterwards.
+/// to the helper's first questions, using only ready-made cards. What the
+/// topic is becomes the board's summary and the people who help go in the
+/// helper's notes; neither gets a card. The helper tidies it up afterwards.
 public enum StarterBoard {
     public struct Answers: Sendable {
         public var about: String
@@ -16,14 +17,12 @@ public enum StarterBoard {
         }
     }
 
-    public static func board(topicName: String) -> Board {
-        Board(modules: [
-            BoardModule(id: "on-your-mind", title: "On your mind", span: 7, kind: "list"),
-            BoardModule(id: "about", title: "About \(topicName)", span: 5, kind: "notes"),
-            BoardModule(id: "people", title: "People", span: 6, kind: "table", columns: [
-                CardColumn(key: "title", label: "Who"), CardColumn(key: "detail", label: "Role"),
-            ]),
-            BoardModule(id: "coming-up", title: "Coming up", span: 6, kind: "schedule"),
+    public static func board(topicName: String, summary: String? = nil) -> Board {
+        Board(summary: summary, modules: [
+            BoardModule(id: "on-your-mind", title: "On your mind", span: 7, kind: "list",
+                        about: "The open things you want off your mind, and who's handling each."),
+            BoardModule(id: "coming-up", title: "Coming up", span: 5, kind: "schedule",
+                        about: "This topic's time on your schedule over the next two weeks."),
         ])
     }
 
@@ -31,19 +30,18 @@ public enum StarterBoard {
     public static func apply(to workspace: TopicWorkspace, answers: Answers) throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        let json = String(decoding: try encoder.encode(board(topicName: workspace.topic.name)), as: UTF8.self)
+        let about = answers.about.trimmingCharacters(in: .whitespaces)
+        let json = String(decoding: try encoder.encode(board(topicName: workspace.topic.name, summary: about.isEmpty ? nil : about)), as: UTF8.self)
         try workspace.write(TopicWorkspace.boardFile, json + "\n")
+        let people = split(answers.helpers).map { person -> String in
+            let (name, role) = nameAndRole(person)
+            return "- \(name)" + (role.map { " (\($0))" } ?? "")
+        }
+        if !people.isEmpty { try workspace.write("notes/people.md", "# People\n\n" + people.joined(separator: "\n") + "\n") }
         let database = workspace.database
         try database.transaction {
-            if !answers.about.trimmingCharacters(in: .whitespaces).isEmpty {
-                try database.query("INSERT INTO items (card, title) VALUES ('about', ?)", [.text(answers.about.trimmingCharacters(in: .whitespaces))])
-            }
             for (index, task) in split(answers.onYourMind).enumerated() {
                 try database.query("INSERT INTO items (card, title, position) VALUES ('on-your-mind', ?, ?)", [.text(task), .integer(Int64(index))])
-            }
-            for person in split(answers.helpers) {
-                let (name, role) = nameAndRole(person)
-                try database.query("INSERT INTO items (card, title, detail) VALUES ('people', ?, ?)", [.text(name), role.map { .text($0) } ?? .null])
             }
         }
         try workspace.commit(message: "Starter board", author: "Topics")

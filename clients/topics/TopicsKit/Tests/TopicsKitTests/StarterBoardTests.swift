@@ -10,6 +10,12 @@ final class StarterBoardTests: XCTestCase {
         XCTAssertEqual(StarterBoard.split("  "), [])
     }
 
+    func testABoardWithoutASummaryOrAboutsStillDecodes() throws {
+        let board = try JSONDecoder().decode(Board.self, from: Data(#"{"columns": 12, "modules": [{"id": "a", "title": "A", "span": 6, "kind": "list"}]}"#.utf8))
+        XCTAssertNil(board.summary)
+        XCTAssertNil(board.modules[0].about)
+    }
+
     func testReadsRolesInParentheses() {
         XCTAssertEqual(StarterBoard.nameAndRole("Dr. Patel (vet)").0, "Dr. Patel")
         XCTAssertEqual(StarterBoard.nameAndRole("Dr. Patel (vet)").1, "Vet")
@@ -23,11 +29,15 @@ final class StarterBoardTests: XCTestCase {
         let workspace = try TopicWorkspace(topic: topic, base: base, template: nil)
         try workspace.write(TopicWorkspace.boardFile, #"{"columns": 12, "modules": []}"#)
         try StarterBoard.apply(to: workspace, answers: .init(about: "Juniper, our collie", onYourMind: "vet visits, food", helpers: "Maya (neighbour)"))
-        XCTAssertEqual(try workspace.board().modules.map(\.kind), ["list", "notes", "table", "schedule"])
-        XCTAssertNoThrow(try workspace.board().validate(existingModules: []))
-        let rows = try workspace.database.query("SELECT card, title, detail FROM items ORDER BY id")
-        XCTAssertEqual(rows.count, 4)
-        XCTAssertEqual(rows.last?["detail"], .text("Neighbour"))
+        let board = try workspace.board()
+        // People and the topic's description are background, not cards.
+        XCTAssertEqual(board.modules.map(\.kind), ["list", "schedule"])
+        XCTAssertEqual(board.summary, "Juniper, our collie")
+        XCTAssertTrue(board.modules.allSatisfy { $0.about?.isEmpty == false })
+        XCTAssertNoThrow(try board.validate(existingModules: []))
+        let rows = try workspace.database.query("SELECT card, title FROM items ORDER BY id")
+        XCTAssertEqual(rows.map { $0["card"] }, [.text("on-your-mind"), .text("on-your-mind")])
+        XCTAssertEqual(workspace.read("notes/people.md"), "# People\n\n- Maya (Neighbour)\n")
         XCTAssertEqual(try workspace.history().first?.subject, "Starter board")
     }
 }

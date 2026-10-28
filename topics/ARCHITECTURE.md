@@ -240,3 +240,30 @@ Agreed after the first design pass; built in `clients/topics/`.
 - **The agent works on the board, not in chat.** Findings go into rows;
   decisions it needs become proposals attached to rows, which the owner
   resolves in the sidebar. The owner never sees internals.
+- **A board says what it's for, then gets out of the way.** A one-line
+  summary sits under the title; clicking it opens an About panel with the
+  facts the helper keeps and what each card handles. People stay background
+  knowledge in the helper's notes and core memory, not a card on every
+  board, until multi-player boards add people to a board directly.
+- **Booking sites climb a ladder, and the owner moves them up.** Every site
+  starts with the helper only checking what's open. The first time the
+  owner picks something on a site, they choose to book it from the link or
+  sign in once. Signing in is Veetbot's device sign-in (ADR-0128) in a
+  Topics window: the password goes to the site only, Veetbot keeps the
+  encrypted session, and Topics keeps only the profile id per site in
+  `shared/sites.json`. There is no password vault. Booking as the owner
+  still needs topic sessions bound to those profiles and the browser
+  service running; until then a signed-in site gets a link too.
+- **The agent looks before it asks, and asks with pickers.** It checks the
+  owner's calendar, mail, the shared schedule and what other helpers know
+  first, and prefills what it finds. A question carries typed fields
+  (date, date range, number, pick, multi-pick, connect, and short text only
+  as a last resort); the sidebar shows a calendar, chips or a stepper, and
+  each answer is checked against its field and written into the row. Light
+  questions (a short choice, one or two fields, a one-line answer) are
+  answered right on their row; purchases and longer ones open the sidebar.
+  Anything that needs a booking is checked for availability first: by date
+  when the date is fixed, by the place's open slots when the place is.
+  Recurring appointments are inferred from booking emails before asking. The
+  Mac's Calendar (read-only, through EventKit) is the first connected
+  source; Apple Health and other accounts are not connected yet.

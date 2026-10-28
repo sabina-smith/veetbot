@@ -11,25 +11,25 @@ import UIKit
 /// signed in. Nothing it holds is persisted, logged or kept in view state, and
 /// `destroy()` clears the store and releases the web views.
 @MainActor
-final class DeviceSignInWebSession: NSObject, ObservableObject {
+public final class DeviceSignInWebSession: NSObject, ObservableObject {
     /// Reads `localStorage` as `[name, value]` pairs (§2.5 item 4).
     static let storageScript =
         "const o=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);o.push([k,localStorage.getItem(k)]);}return JSON.stringify(o);"
 
-    @Published private(set) var currentURL: URL?
-    @Published private(set) var isLoading = false
-    @Published private(set) var blockedHost: String?
+    @Published public private(set) var currentURL: URL?
+    @Published public private(set) var isLoading = false
+    @Published public private(set) var blockedHost: String?
     @Published private(set) var allowedOrigins: [String]
     /// The origin a new profile adopted from its first load (D11), if any.
     @Published private(set) var adoptedOrigin: String?
 
-    private(set) var webView: WKWebView?
+    public private(set) var webView: WKWebView?
     private var dataStore: WKWebsiteDataStore?
     private var adoptableOrigin: String?
     private var visitedOrigins: Set<String> = []
     private var observations: [NSKeyValueObservation] = []
 
-    init(request: DeviceSignInRequest) {
+    public init(request: DeviceSignInRequest) {
         allowedOrigins = request.allowedOrigins
         adoptableOrigin = request.profileID == nil ? request.adoptableOrigin : nil
         super.init()
@@ -71,7 +71,7 @@ final class DeviceSignInWebSession: NSObject, ObservableObject {
         WKWebsiteDataStore.nonPersistent()
     }
 
-    var canConfirm: Bool {
+    public var canConfirm: Bool {
         DeviceSignInNavigationPolicy.canConfirm(
             currentURL: currentURL, isLoading: isLoading, allowedOrigins: Set(allowedOrigins)
         )
@@ -81,7 +81,7 @@ final class DeviceSignInWebSession: NSObject, ObservableObject {
     /// owner confirmed on (§2.5 item 4). Other visited allowed origins are read
     /// through a hidden web view on the same store; if that fails, only the
     /// current origin's storage is sent (D15).
-    func collect() async throws -> DeviceSessionHandoff {
+    public func collect() async throws -> DeviceSessionHandoff {
         guard let webView, let dataStore, let current = webView.url else {
             throw WebsiteSessionScopeError.invalid("page")
         }
@@ -105,7 +105,7 @@ final class DeviceSignInWebSession: NSObject, ObservableObject {
 
     /// Stops the page, clears every website data type from the store, and
     /// releases the web views (§2.5 item 7). Safe to call more than once.
-    func destroy() async {
+    public func destroy() async {
         observations.forEach { $0.invalidate() }
         observations = []
         webView?.stopLoading()
@@ -152,7 +152,7 @@ final class DeviceSignInWebSession: NSObject, ObservableObject {
 }
 
 extension DeviceSignInWebSession: WKNavigationDelegate, WKUIDelegate {
-    func webView(
+    public func webView(
         _ webView: WKWebView,
         decidePolicyFor navigationAction: WKNavigationAction,
         decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
@@ -176,7 +176,7 @@ extension DeviceSignInWebSession: WKNavigationDelegate, WKUIDelegate {
     }
 
     /// No downloads: a response the view cannot show is cancelled.
-    func webView(
+    public func webView(
         _ webView: WKWebView,
         decidePolicyFor navigationResponse: WKNavigationResponse,
         decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void
@@ -184,7 +184,7 @@ extension DeviceSignInWebSession: WKNavigationDelegate, WKUIDelegate {
         decisionHandler(navigationResponse.canShowMIMEType ? .allow : .cancel)
     }
 
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+    public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         // Only the first load may adopt the bare or www origin (D11).
         adoptableOrigin = nil
         if let url = webView.url, let origin = WebsiteSessionScope.origin(of: url),
@@ -196,7 +196,7 @@ extension DeviceSignInWebSession: WKNavigationDelegate, WKUIDelegate {
     }
 
     /// No popups.
-    func webView(
+    public func webView(
         _ webView: WKWebView,
         createWebViewWith configuration: WKWebViewConfiguration,
         for navigationAction: WKNavigationAction,
@@ -250,24 +250,32 @@ private final class BlankPageLoader: NSObject, WKNavigationDelegate {
 }
 
 #if os(macOS)
-struct DeviceSignInWebView: NSViewRepresentable {
+public struct DeviceSignInWebView: NSViewRepresentable {
     let webView: WKWebView?
 
-    func makeNSView(context: Context) -> NSView {
+    public init(webView: WKWebView?) {
+        self.webView = webView
+    }
+
+    public func makeNSView(context: Context) -> NSView {
         webView ?? NSView()
     }
 
-    func updateNSView(_ nsView: NSView, context: Context) {}
+    public func updateNSView(_ nsView: NSView, context: Context) {}
 }
 #else
-struct DeviceSignInWebView: UIViewRepresentable {
+public struct DeviceSignInWebView: UIViewRepresentable {
     let webView: WKWebView?
 
-    func makeUIView(context: Context) -> UIView {
+    public init(webView: WKWebView?) {
+        self.webView = webView
+    }
+
+    public func makeUIView(context: Context) -> UIView {
         webView ?? UIView()
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {}
+    public func updateUIView(_ uiView: UIView, context: Context) {}
 }
 #endif
 

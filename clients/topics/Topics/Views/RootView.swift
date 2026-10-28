@@ -16,6 +16,7 @@ struct RootView: View {
         }
         .background(Color.white)
         .preferredColorScheme(.light)
+        .sheet(item: $app.siteSignIn, onDismiss: { app.siteSignInClosed() }) { SiteSignInSheet(model: $0) }
         #if DEBUG
         .task { DebugSnapshots.startIfRequested(app: app) }
         #endif
@@ -84,6 +85,7 @@ enum Ink {
     static let faint = Color(hex: "#9A9A94")
     static let line = Color(hex: "#E7E7E3")
     static let attention = Color(hex: "#FF5A1F")
+    static let attentionText = Color(hex: "#C2410C")
 }
 
 struct TopicRail: View {

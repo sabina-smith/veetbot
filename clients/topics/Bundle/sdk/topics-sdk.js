@@ -244,6 +244,8 @@
     },
     list: () => call("proposals.list"),
     open: (id) => (window.__board ? window.__board.openProposal(id) : call("proposals.open", { id })),
+    /** Controls to answer `p` right on the row, or null when it needs the sidebar. */
+    inline: (p) => (window.__board?.inlineAnswer ? window.__board.inlineAnswer(p) : null),
   };
 
   const agent = {
