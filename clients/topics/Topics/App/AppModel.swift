@@ -10,9 +10,11 @@ final class AppModel: ObservableObject {
         case home
         case topic(String)
         case newTopic
+        case onboarding
     }
 
     let connection = VeetbotConnection()
+    private(set) lazy var onboarding = OnboardingModel(connection: connection)
     let schedule: SharedSchedule
     let topicStore: TopicStore
     @Published private(set) var topics: [Topic] = []
@@ -43,7 +45,7 @@ final class AppModel: ObservableObject {
         schedule = SharedSchedule(fileURL: Self.dataRoot.appendingPathComponent("shared/schedule.json"))
         topicStore = TopicStore(fileURL: Self.dataRoot.appendingPathComponent("topics.json"))
         topics = topicStore.topics
-        if topics.isEmpty { screen = .newTopic }
+        if topics.isEmpty { screen = .onboarding }
         do {
             builder = try ModuleBuilder()
             for topic in topics { try open(topic) }
@@ -69,8 +71,8 @@ final class AppModel: ObservableObject {
                 UserDefaults.standard.set(true, forKey: Self.migratedKey)
             }
             try topicStore.reconcile(with: server.map { (id: $0.id, name: $0.name) })
+            for topic in topicStore.topics where boards[topic.id] == nil { try open(topic) }
             topics = topicStore.topics
-            for topic in topics where boards[topic.id] == nil { try open(topic) }
             let current = Set(topics.map(\.id))
             for id in Array(boards.keys) where !current.contains(id) {
                 boards[id] = nil
@@ -113,24 +115,29 @@ final class AppModel: ObservableObject {
 
     // MARK: New topic
 
-    func createTopic(name: String, colour: String, helper: String, answers: [(q: String, a: String)]) async throws {
+    func createTopic(
+        name: String, colour: String, helper: String, answers: [(q: String, a: String)],
+        instructions: String = "", show: Bool = true
+    ) async throws {
         await serverSync?.value
         let api = try api()
         let taken = Set(try await api.list().map(\.id))
         let draft = topicStore.draft(name: name, accentHex: colour, agentName: helper, taken: taken)
-        let created = try await api.create(id: draft.id, name: draft.name)
+        let created = try await api.create(id: draft.id, name: draft.name, instructions: instructions)
         var topic = draft
         topic.name = created.name
         try topicStore.add(topic)
-        topics = topicStore.topics
+        // Open before publishing: the rail expects a board for every topic,
+        // and opening waits on git, which lets SwiftUI redraw.
         try open(topic)
+        topics = topicStore.topics
         // The starter board is on screen at once; the helper tidies it after.
         if let board = boards[topic.id] {
             let answer = { (i: Int) in answers.indices.contains(i) ? answers[i].a : "" }
             try StarterBoard.apply(to: board.workspace, answers: .init(about: answer(0), onYourMind: answer(1), helpers: answer(2)))
             board.reload()
         }
-        screen = .topic(topic.id)
+        if show { screen = .topic(topic.id) }
         let told = answers.filter { !$0.a.isEmpty }.map { "\($0.q)\n\($0.a)" }.joined(separator: "\n\n")
         agents[topic.id]?.checkIn(
             reason: "You set up \(topic.name)",
@@ -197,7 +204,32 @@ final class AppModel: ObservableObject {
         return label[label.index(after: colon)...].trimmingCharacters(in: .whitespaces)
     }
 
-    /// Calls from the Home and New topic pages.
+    private static func answers(_ value: Any?) -> [(q: String, a: String)] {
+        (value as? [[String: Any]] ?? []).map { (q: $0["q"] as? String ?? "", a: $0["a"] as? String ?? "") }
+    }
+
+    /// Creates the topics the owner kept from onboarding, each seeded with
+    /// what the scan found, and opens the first.
+    private func createFromOnboarding(_ chosen: [[String: Any]]) async throws {
+        var first: String?
+        for pick in chosen {
+            guard let source = pick["source"] as? String, let proposal = onboarding.proposal(named: source) else { continue }
+            let name = (pick["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? proposal.name
+            try await createTopic(
+                name: name, colour: pick["colour"] as? String ?? "#0E7C86", helper: pick["helper"] as? String ?? "Wren",
+                answers: [
+                    (q: "What's \(name) about?", a: [proposal.about, proposal.why].filter { !$0.isEmpty }.joined(separator: " ")),
+                    (q: "What do you want off your mind?", a: proposal.onYourMind.joined(separator: ", ")),
+                    (q: "Anyone who helps with it?", a: proposal.people.joined(separator: ", ")),
+                ],
+                instructions: proposal.instructions, show: false
+            )
+            first = first ?? topics.last?.id
+        }
+        if let first { screen = .topic(first) }
+    }
+
+    /// Calls from the Home, New topic and onboarding pages.
     func handleHome(op: String, args: [String: Any]) async throws -> Any? {
         let topicID = args["topicId"] as? String ?? ""
         let proposalID = (args["id"] as? NSNumber)?.int64Value
@@ -210,8 +242,18 @@ final class AppModel: ObservableObject {
             if let proposalID { boards[topicID]?.openProposalWhenShown(proposalID) }
         case "home.openTopic":
             screen = .topic(topicID)
+        case "onboarding.start":
+            onboarding.start()
+        case "onboarding.status":
+            return onboarding.status()
+        case "onboarding.answer":
+            onboarding.answer(Self.answers(args["answers"]))
+        case "onboarding.skip":
+            screen = .newTopic
+        case "onboarding.create":
+            try await createFromOnboarding(args["topics"] as? [[String: Any]] ?? [])
         case "newtopic.create":
-            let answers = (args["answers"] as? [[String: Any]] ?? []).map { (q: $0["q"] as? String ?? "", a: $0["a"] as? String ?? "") }
+            let answers = Self.answers(args["answers"])
             try await createTopic(
                 name: args["name"] as? String ?? "New topic", colour: args["colour"] as? String ?? "#0E7C86",
                 helper: args["helper"] as? String ?? "Wren", answers: answers
