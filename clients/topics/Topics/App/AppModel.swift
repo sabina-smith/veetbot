@@ -15,6 +15,8 @@ final class AppModel: ObservableObject {
 
     let connection = VeetbotConnection()
     private(set) lazy var onboarding = OnboardingModel(connection: connection)
+    /// Connecting Gmail accounts to the local Veetbot.
+    private(set) lazy var gmail = GmailSetup(connection: connection)
     let schedule: SharedSchedule
     let topicStore: TopicStore
     /// How far each booking site has climbed, shared by every topic.
@@ -239,6 +241,16 @@ final class AppModel: ObservableObject {
         (value as? [[String: Any]] ?? []).map { (q: $0["q"] as? String ?? "", a: $0["a"] as? String ?? "") }
     }
 
+    /// Runs onboarding again on top of the current topics: a fresh scan
+    /// session that skips what already has a board. Existing boards are
+    /// untouched; anything kept is added beside them.
+    func rescanGmail() {
+        if screen != .onboarding || onboarding.isFinished {
+            onboarding.reset(existing: topics.map(\.name))
+        }
+        screen = .onboarding
+    }
+
     /// Creates the topics the owner kept from onboarding, each seeded with
     /// what the scan found, and opens the first.
     private func createFromOnboarding(_ chosen: [[String: Any]]) async throws {
@@ -279,6 +291,8 @@ final class AppModel: ObservableObject {
             return onboarding.status()
         case "onboarding.answer":
             onboarding.answer(Self.answers(args["answers"]))
+        case "gmail.connect":
+            gmail.present { [weak self] in self?.onboarding.start() }
         case "onboarding.skip":
             screen = .newTopic
         case "onboarding.create":

@@ -43,7 +43,8 @@ async def _recent_user_messages(
         if session.topic_id == topic_id
     ][:REVIEW_SESSIONS]
     messages: builtins.list[str] = []
-    for session in sessions:
+    # Sessions come newest first; read them oldest first so the tail is the latest.
+    for session in reversed(sessions):
         for event in await uow.events.list_after(session.id, 0, principal):
             content = event.payload.get("content")
             if (

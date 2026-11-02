@@ -17,6 +17,7 @@ struct RootView: View {
         .background(Color.white)
         .preferredColorScheme(.light)
         .sheet(item: $app.siteSignIn, onDismiss: { app.siteSignInClosed() }) { SiteSignInSheet(model: $0) }
+        .modifier(GmailSheetHost(setup: app.gmail))
         #if DEBUG
         .task { DebugSnapshots.startIfRequested(app: app) }
         #endif
@@ -112,6 +113,12 @@ struct TopicRail: View {
                 }
             }
             .padding(.top, 12)
+            row(selected: app.screen == .onboarding, action: { app.rescanGmail() }) {
+                HStack(spacing: 12) {
+                    Image(systemName: "envelope").font(.system(size: 12, weight: .medium))
+                    Text("Scan Gmail again").font(.system(size: 14))
+                }
+            }
             Spacer()
             if let problem = app.syncProblem {
                 Button {

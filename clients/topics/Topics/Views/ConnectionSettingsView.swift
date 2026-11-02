@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ConnectionSettingsView: View {
     @EnvironmentObject private var connection: VeetbotConnection
+    let gmail: GmailSetup
     @State private var token = ""
     @State private var message: String?
 
@@ -29,6 +30,7 @@ struct ConnectionSettingsView: View {
             }
             Text("Local development serves Veetbot over HTTPS on localhost:8443 and ignores the token.")
                 .font(.caption).foregroundStyle(.secondary)
+            GmailAccountsSection(setup: gmail)
         }
         .formStyle(.grouped)
     }

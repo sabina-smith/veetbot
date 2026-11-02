@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import time
+from datetime import time, timedelta
 from uuid import UUID
 
 import httpx
 
+from agent_core.adapters.determinism import FixedClock
 from agent_core.api import create_app
 from agent_core.application.topics import PublicTopicService
 from agent_core.bootstrap import build
@@ -160,3 +161,38 @@ async def test_a_review_turns_recent_use_into_new_suggestions_only() -> None:
         assert seen.recent_user_messages == ["How much water in litres for bed three?"]
         assert seen.dismissed == ["Mention frost dates."]
         assert await service.review(owner, "garden") == []
+
+
+async def test_a_review_reads_the_topics_latest_messages_oldest_first() -> None:
+    owner = principal().model_copy(update={"scopes": {"session.read", "session.write"}})
+    clock = FixedClock(NOW)
+    async with build(
+        settings=memory_settings(), storage="memory", principal=owner, clock=clock
+    ) as app:
+        topics = app.services.topics
+        assert topics is not None
+        await topics.create(owner, TopicCreateRequest(id="garden", name="Garden"))
+        for label in ("older", "newer"):
+            clock.advance(timedelta(days=1))
+            session = await app.services.sessions.create(owner, "general", {}, topic_id="garden")
+            async with app.uow_factory() as uow:
+                for number in range(30):
+                    await uow.events.append(
+                        NewEvent(
+                            session_id=session.id,
+                            run_id=None,
+                            event_type="user.message.created",
+                            actor_type="principal",
+                            actor_id=owner.principal_id,
+                            payload={"content": f"{label} {number}"},
+                        )
+                    )
+        reviewer = _FakeReviewer(TopicReviewAnswer(suggestions=[]))
+        service = PublicTopicService(
+            uow_factory=app.uow_factory, clock=app.clock, ids=app.ids, reviewer=reviewer
+        )
+        await service.review(owner, "garden")
+        assert reviewer.seen[0].recent_user_messages == [
+            *(f"older {number}" for number in range(20, 30)),
+            *(f"newer {number}" for number in range(30)),
+        ]

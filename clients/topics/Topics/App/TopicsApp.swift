@@ -14,9 +14,9 @@ struct TopicsApp: App {
         .windowToolbarStyle(.unified)
 
         Settings {
-            ConnectionSettingsView()
+            ConnectionSettingsView(gmail: app.gmail)
                 .environmentObject(app.connection)
-                .frame(width: 460)
+                .frame(width: 560)
                 .padding(20)
         }
     }

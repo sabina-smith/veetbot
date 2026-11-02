@@ -23,6 +23,12 @@
       const changed = JSON.stringify(next) !== JSON.stringify(s.status);
       const before = s.step;
       s.status = next;
+      // Scan Gmail again resets the app's state; start this page over too.
+      if (next.phase === "idle" && !["connect", "creating"].includes(s.step)) {
+        Object.assign(s, { step: "connect", started: false, qi: 0, answers: [], draft: "", sent: false, picks: null, error: "" });
+        render();
+        return;
+      }
       if (s.step === "connect" && ["scanning", "scanned", "proposing", "proposed"].includes(next.phase)) s.step = "about";
       if (s.step === "about" && next.phase === "proposed") { s.step = "choose"; s.picks = defaultPicks(next); }
       if (!changed || s.step === "creating") return;
@@ -57,7 +63,7 @@
       el("p", { class: "eyebrow muted" }, "Welcome to Topics"),
       el("h1", { class: "display tp-title", style: { fontSize: "64px", lineHeight: 1.02, margin: "8px 0 0" } }, "Let’s start with your inbox."),
       el("p", { style: { marginTop: "20px", fontSize: "17px", lineHeight: 1.5, maxWidth: "620px", color: "var(--ink-2)" } },
-        "Your helper looks over subject lines and senders from the last three months of Gmail to see what’s going on: work, home, the dog, the kids’ school. Then it sets up your first topics from that."),
+        "Your helper looks over your receipts, bookings and confirmations from the last three months to see what’s going on: the dog’s vet, the house, the kids’ school, trips. Then it sets up your first topics from that."),
       el("p", { class: "t-small muted", style: { marginTop: "8px", maxWidth: "620px" } }, "It only reads. Nothing is sent, moved or labelled, and your mail stays with your own Veetbot."),
       phase === "unavailable" ? unavailable()
         : checking ? el("p", { class: "t-helper-note", style: { marginTop: "40px", fontSize: "17px", color: ACCENT } }, "Checking your Gmail…")
@@ -71,12 +77,11 @@
     return el("div", { class: "tp-card rise", style: { marginTop: "40px", maxWidth: "640px", borderTop: "2px solid var(--bad)" } },
       el("p", { class: "eyebrow", style: { margin: "0 0 8px" } }, "Gmail isn’t connected"),
       el("p", { style: { margin: 0, fontSize: "15px" } }, s.status.error || "Your helper couldn’t read Gmail."),
-      el("ol", { style: { margin: "16px 0 0", paddingLeft: "20px", fontSize: "14px", lineHeight: 1.6, color: "var(--ink-2)" } },
-        el("li", {}, "In the veetbot folder, run ", el("code", {}, "uv run python -m gmail_mcp bootstrap"), " and approve each Google prompt."),
-        el("li", {}, "Point Veetbot’s ", el("code", {}, "GMAIL_*_CREDENTIAL_FILE"), " settings at the new files and restart Veetbot."),
-        el("li", {}, "Come back here and try again.")),
+      el("p", { style: { margin: "12px 0 0", fontSize: "14px", lineHeight: 1.6, color: "var(--ink-2)" } },
+        "Connect an account and approve the three Google prompts (read, change, send). Topics restarts Veetbot and checks your Gmail again by itself."),
       el("div", { class: "t-row", style: { gap: "16px", marginTop: "20px" } },
-        el("button", { class: "t-button t-primary", type: "button", onclick: retry }, "Try again"),
+        el("button", { class: "t-button t-primary", type: "button", onclick: () => { s.started = true; call("gmail.connect"); } }, "Connect a Gmail account"),
+        el("button", { class: "t-button", type: "button", onclick: retry }, "Try again"),
         skipButton()));
   }
 
@@ -150,7 +155,7 @@
     return el("aside", { id: "scan-panel", class: "tp-card", style: { borderTop: `2px solid ${ACCENT}`, position: "sticky", top: "24px" } },
       el("p", { class: "eyebrow", style: { margin: "0 0 12px" } }, done ? "Read your inbox" : "Reading your inbox"),
       el("p", { class: "display tabular", style: { margin: 0, fontSize: "44px", lineHeight: 1 } }, done ? String(st.threadsScanned || "—") : String(st.searches || 0)),
-      el("p", { class: "t-small muted", style: { marginTop: "4px" } }, done ? "threads from the last 3 months" : "steps so far · this takes a few minutes"),
+      el("p", { class: "t-small muted", style: { marginTop: "4px" } }, done ? "receipts and bookings from the last 3 months" : "steps so far · this takes a few minutes"),
       done && st.areas.length ? el("div", { style: { marginTop: "20px" } },
         el("p", { class: "eyebrow muted", style: { margin: "0 0 8px" } }, "What came up"),
         el("div", { class: "t-row", style: { gap: "6px", flexWrap: "wrap" } }, st.areas.map((a) => el("span", { style: { fontSize: "13px", padding: "4px 8px", background: "#f1f1ee" } }, a))))
