@@ -232,6 +232,10 @@ accepted under a different id, but the label cannot independently prove which
 Google identity was selected; the work-only draft smoke below is the identity
 check. Do not edit an existing credential JSON to add the label.
 
+On the owner's Mac, the Topics app can run this named-account ceremony and
+the manifest, `.env` and restart steps for local development; see
+`clients/topics/README.md`. It passes the typed `CONTINUE` through unchanged.
+
 ## Phase 3 — Install and activate production credentials
 
 The current Droplet uses `veetbot` for both release ownership and application

@@ -9,6 +9,7 @@ __pycache__/
 *.py[cod]
 .env
 .env.tmp.*
+.env.topics-backup
 .venv/
 venv/
 *.egg-info/

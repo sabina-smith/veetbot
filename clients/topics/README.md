@@ -39,3 +39,31 @@ Each topic's workspace is a git repository under
 accept `-snapshotDir <dir>` (PNG snapshots of the window, plus
 `errors.log` for card errors), `-screen home|new|<topic id>` and
 `-autoCheckIn YES`.
+
+## Connecting Gmail
+
+Onboarding's "Connect a Gmail account" button (also in Settings → Gmail)
+runs Veetbot's own `python -m gmail_mcp bootstrap --account-id <name>` from
+the Veetbot folder. Each of the three Google consents shows the command's
+data-use disclosure, and what the owner types is passed straight to the
+command, so it still needs the exact word CONTINUE. Afterwards Topics:
+
+1. adds the account to `~/.config/veetbot/gmail-accounts.json`, the
+   ADR-0085 accounts manifest (owner-only, validated as Veetbot does);
+2. points Veetbot's `.env` at it (`GMAIL_ACCOUNTS_FILE`,
+   `AGENT_EMAIL_ENABLED=1`) and comments out the three legacy
+   `GMAIL_*_CREDENTIAL_FILE` lines, keeping a `.env.topics-backup`;
+3. restarts Veetbot through two LaunchAgents,
+   `com.sabina.veetbot.api` (`serve_https_api.py`) and
+   `com.sabina.veetbot.worker` (`agent worker`), logging to
+   `~/Library/Logs/Veetbot/`. The first time, it asks before stopping
+   Veetbot processes started from a terminal;
+4. waits for the account to appear in `GET /v1/email/accounts`, then
+   retries the onboarding scan.
+
+The first account becomes the default and keeps the `gmail_read`,
+`gmail_write` and `gmail_send` tool names. Credentials made by the legacy
+single-account ceremony carry no account name, so they can't be reused in
+the manifest: reconnect that mailbox under a name instead. The Veetbot
+folder and the OAuth client file
+(`~/.config/veetbot/client-secret.json` by default) are set in Settings.
